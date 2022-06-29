@@ -4,17 +4,25 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "rollup -c",
+    "watch": "rollup -c -w"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/HoyosJuan/openbim-viewer.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "HoyosJuan",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/HoyosJuan/openbim-viewer/issues"
   },
-  "homepage": "https://github.com/HoyosJuan/openbim-viewer#readme"
+  "homepage": "https://github.com/HoyosJuan/openbim-viewer#readme",
+  "dependencies": {
+    "web-ifc-viewer": "^1.0.202"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^13.3.0",
+    "rollup": "^2.75.7"
+  }
 }
