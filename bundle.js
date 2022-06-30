@@ -121374,10 +121374,14 @@ input.addEventListener("change",
 
 function loadIFC( url ) {
 
-    viewer.IFC.loader.load( url, (model) => {
+    viewer.IFC.loader.load( url, async (model) => {
 
         scene.add(model);
         ifcModels.push(model);
+        model.modelData = {};
+        await getModelProperties(model.modelID);
+        
+        console.log("Model Loaded");
 
         const edges = new EdgesGeometry( model.geometry );
         const edgeMaterial = new LineBasicMaterial( { color: "Black"} );
@@ -121404,7 +121408,7 @@ function onMouseMove (e) {
 
         const expressId = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex);
         viewer.IFC.selector.pickIfcItemsByID(0,[expressId]);
-        console.log(expressId);
+        //console.log(expressId)
         return
 
     }
@@ -121421,7 +121425,11 @@ function onMouseMove (e) {
 renderer.domElement.addEventListener( "mousemove", onMouseMove );
 
 const button = document.getElementById('properties');
-button.addEventListener("click", async () => console.log(await hasProperty(0,2979)) );
+const propertiesSelector = document.getElementById("propertiesList");
+propertiesSelector.addEventListener("change", () => console.log("asd"));
+button.addEventListener("click", () => fillSelectTag("propertiesList", Object.keys(viewer.context.items.ifcModels[0].modelData)) );
+
+//-------START CUSTOM BASIC FUNCTIONS
 
 //Custom forEach to handle promises
 async function asyncForEach(array, callback){
@@ -121432,73 +121440,68 @@ async function asyncForEach(array, callback){
 
 }
 
-async function getPropertySets(modelId, expressId){
-    
-    const psets = [];
-    const elementData = await viewer.IFC.getProperties(modelId,expressId,true);
-
-    elementData.psets.forEach(pset => {
-
-        psets.push(pset);
-
-    });
-
-    return psets
-
+function removeDuplicates(array) {
+    return array.filter((item,
+        index) => array.indexOf(item) === index);
 }
 
-async function getPsetProperties(pset){
-
-    const properties = [];
-
-    await asyncForEach(pset.HasProperties, async property => {
-        properties.push(await viewer.IFC.getProperties(0,property.value,true));
-    });
+async function getModelProperties(modelID) {
     
-    return properties
-
-}
-
-async function getElementPsetProperties(modelId, expressId){
-
-    const properties = [];
-    const psets = await getPropertySets(modelId, expressId);
-
-    await asyncForEach(psets, async pset => {
-        const psetProperties = await getPsetProperties(pset);
-        psetProperties.forEach( property => {
-            properties.push(property);
+    const spatialStructure = await viewer.IFC.getSpatialStructure(modelID);
+    const modelElements = [];
+    
+    spatialStructure.children[0].children[0].children.forEach(storey => {
+        storey.children.forEach(element => {
+            modelElements.push(element.expressID);
         });
     });
 
-    return properties
+    //const testList = [modelElements[6], modelElements[210]]
+    const modelData = {};
 
-}
+    await asyncForEach(modelElements, async expressID => {
 
-async function evalProperty(ifcProperty, leftSide, condition, rightSide){
+        const psets = await viewer.IFC.loader.ifcManager.getPropertySets(modelID, expressID, true);
+        //console.log(psets)
 
-    let test = false; 
-    if (ifcProperty.Name.value == rightSide) {
-     
-        test = true;
+        psets.forEach(pset => {
+            //console.log(pset.HasProperties)
+            pset.HasProperties.forEach(property => {
+                //console.log(property)
+                const propertyName = property.Name.value;
+                if (propertyName in modelData) {
+                    modelData[propertyName].elements.push(expressID);
+                    modelData[propertyName].values.push(property.NominalValue.value);
+                } else {
+                    modelData[propertyName] = { "elements": [], "values": []};
+                    modelData[propertyName].elements.push(expressID);
+                    modelData[propertyName].values.push(property.NominalValue.value);
+                }
 
-    }
-
-    return test
-
-}
-
-async function hasProperty(modelId, expressId){
-
-    const properties = await getElementPsetProperties(modelId, expressId);
-    let test = false;
-
-    await asyncForEach(properties, async property => {
-        if (await evalProperty(property, "", "", "Longitud") == true) {
-            test = true;
-        }
+            });
+        });
     });
 
-    return test
+    for (const property in modelData) {
+        modelData[property].elements = removeDuplicates(modelData[property].elements);
+        modelData[property].values = removeDuplicates(modelData[property].values);
+    }
+
+    ifcModels[modelID].modelData = modelData;
+
+    return modelData
+}
+
+function fillSelectTag(domElementID, list) {
+
+    const element = document.getElementById(domElementID);
+
+    list.forEach(value => {
+        const option = document.createElement("option");
+        option.text = value;
+        element.add(option);
+    });
+
+    return element
 
 }

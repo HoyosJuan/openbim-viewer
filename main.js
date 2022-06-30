@@ -44,10 +44,14 @@ input.addEventListener("change",
 
 function loadIFC( url ) {
 
-    viewer.IFC.loader.load( url, (model) => {
+    viewer.IFC.loader.load( url, async (model) => {
 
         scene.add(model)
         ifcModels.push(model)
+        model.modelData = {}
+        await getModelProperties(model.modelID)
+        
+        console.log("Model Loaded")
 
         const edges = new THREE.EdgesGeometry( model.geometry );
         const edgeMaterial = new THREE.LineBasicMaterial( { color: "Black"} )
@@ -74,7 +78,7 @@ function onMouseMove (e) {
 
         const expressId = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
         viewer.IFC.selector.pickIfcItemsByID(0,[expressId])
-        console.log(expressId)
+        //console.log(expressId)
         return
 
     }
@@ -91,7 +95,11 @@ function onMouseMove (e) {
 renderer.domElement.addEventListener( "mousemove", onMouseMove )
 
 const button = document.getElementById('properties')
-button.addEventListener("click", async () => console.log(await hasProperty(0,2979)) )
+const propertiesSelector = document.getElementById("propertiesList");
+propertiesSelector.addEventListener("change", () => console.log("asd"))
+button.addEventListener("click", () => fillSelectTag("propertiesList", Object.keys(viewer.context.items.ifcModels[0].modelData)) )
+
+//-------START CUSTOM BASIC FUNCTIONS
 
 //Custom forEach to handle promises
 async function asyncForEach(array, callback){
@@ -102,20 +110,12 @@ async function asyncForEach(array, callback){
 
 }
 
-async function getPropertySets(modelId, expressId){
-    
-    const psets = []
-    const elementData = await viewer.IFC.getProperties(modelId,expressId,true)
-
-    elementData.psets.forEach(pset => {
-
-        psets.push(pset)
-
-    });
-
-    return psets
-
+function removeDuplicates(array) {
+    return array.filter((item,
+        index) => array.indexOf(item) === index);
 }
+
+//-------END CUSTOM BASIC FUNCTIONS
 
 async function getPsetProperties(pset){
 
@@ -129,10 +129,10 @@ async function getPsetProperties(pset){
 
 }
 
-async function getElementPsetProperties(modelId, expressId){
+async function getElementPsetProperties(modelID, expressID){
 
     const properties = []
-    const psets = await getPropertySets(modelId, expressId)
+    const psets = await viewer.IFC.loader.ifcManager.getPropertySets(modelID, expressID, true)
 
     await asyncForEach(psets, async pset => {
         const psetProperties = await getPsetProperties(pset)
@@ -170,5 +170,66 @@ async function hasProperty(modelId, expressId){
     })
 
     return test
+
+}
+
+async function getModelProperties(modelID) {
+    
+    const spatialStructure = await viewer.IFC.getSpatialStructure(modelID)
+    const modelElements = []
+    
+    spatialStructure.children[0].children[0].children.forEach(storey => {
+        storey.children.forEach(element => {
+            modelElements.push(element.expressID)
+        });
+    })
+
+    //const testList = [modelElements[6], modelElements[210]]
+    const modelData = {}
+
+    await asyncForEach(modelElements, async expressID => {
+
+        const psets = await viewer.IFC.loader.ifcManager.getPropertySets(modelID, expressID, true)
+        //console.log(psets)
+
+        psets.forEach(pset => {
+            //console.log(pset.HasProperties)
+            pset.HasProperties.forEach(property => {
+                //console.log(property)
+                const propertyName = property.Name.value
+                if (propertyName in modelData) {
+                    modelData[propertyName].elements.push(expressID)
+                    modelData[propertyName].values.push(property.NominalValue.value)
+                } else {
+                    modelData[propertyName] = { "elements": [], "values": []}
+                    modelData[propertyName].elements.push(expressID)
+                    modelData[propertyName].values.push(property.NominalValue.value)
+                }
+
+            });
+        });
+    })
+
+    for (const property in modelData) {
+        modelData[property].elements = removeDuplicates(modelData[property].elements)
+        modelData[property].values = removeDuplicates(modelData[property].values)
+    }
+
+    ifcModels[modelID].modelData = modelData
+
+    return modelData
+}
+
+function fillSelectTag(domElementID, list) {
+
+    const element = document.getElementById(domElementID);
+
+    list.forEach(value => {
+        const option = document.createElement("option");
+        option.text = value;
+        element.add(option);
+    });
+
+    return element
 
 }
