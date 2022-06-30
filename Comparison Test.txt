@@ -1,0 +1,20 @@
+equals
+greater
+less
+greaterEqual
+lessEqual
+contains
+
+[{
+leftSide: "element",
+condition: "contains",
+rightSide: "Area"
+},
+{
+leftSide: "Length",
+condition: "greaterEqual",
+rightSide: 20
+}]
+
+const psets = await getPropertySets(2529)
+const properties = await getPsetProperties(psets[0])

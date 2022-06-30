@@ -2,15 +2,35 @@ import { IfcViewerAPI } from 'web-ifc-viewer'
 import * as THREE from "three"
 
 const container = document.getElementById('viewer-container')
-const viewer = window.viewer = new IfcViewerAPI({ container })
-const ifcModels = viewer.context.items.ifcModels
-const scene = viewer.context.scene.scene
+const viewer = window.viewer = new IfcViewerAPI({ 
+    "container": container,
+    "backgroundColor": new THREE.Color("lightgray")
+})
+const ifc = viewer.IFC.loader.ifcManager
 viewer.axes.setAxes()
-viewer.grid.setGrid()
+viewer.grid.setGrid(200,300)
 
+//Modify some of the web-ifc-viewer defaults
+viewer.IFC.selector.defSelectMat.color = new THREE.Color("gold")
+viewer.IFC.selector.defSelectMat.opacity = 0.25
+
+//Store some viewer data in variables so it can be used easily later
+const ifcModels = viewer.context.items.ifcModels
+const scene = viewer.context.getScene()
+const renderer = viewer.context.getRenderer()
+const raycaster = viewer.context.items.components[6].raycaster
+const camera = viewer.context.getCamera()
+const pointer = new THREE.Vector2()
+
+//Customize the viewer look
+const grid = viewer.grid.grid //Access the THREE.js grid element to manipulate it.
+grid.material.color = {r: 0.8, g: 0.8, b: 0.8}
+grid.material.transparent = true
+grid.material.opacity = 0.15
+
+/*//Let the user select its own files
 const input = document.getElementById("file-input")
-
-/*input.addEventListener("change",
+input.addEventListener("change",
 
   async (changed) => {
    
@@ -43,18 +63,93 @@ function loadIFC( url ) {
 
 loadIFC("SRR-CGC-T01-ZZZ-M3D-EST-001.ifc")
 
-//Customize the viewer look
-const grid = viewer.grid.grid //Access the THREE.js grid element to manipulate it.
-grid.material.color = {r: 0.8, g: 0.8, b: 0.8}
-grid.material.transparent = true
-grid.material.opacity = 0.15
-
-const renderer = viewer.context.renderer.renderer
-const raycaster = viewer.context.items.components[6].raycaster
-
 function onMouseMove (e) {
+
+    pointer.x = ( (e.x - e.target.offsetLeft) / e.target.clientWidth ) * 2 - 1
+    pointer.y = - ( (e.y - e.target.offsetTop) / e.target.clientHeight ) * 2 + 1
+    raycaster.setFromCamera( pointer, camera )
     const intersect = raycaster.intersectObjects( ifcModels, false )[0]
-    console.log(intersect)
+
+    if ( intersect ) {
+
+        const expressId = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
+        viewer.IFC.selector.pickIfcItemsByID(0,[expressId])
+        //console.log(expressId)
+        return
+
+    }
+
+    if ( intersect == null ) {
+
+        viewer.IFC.selector.unpickIfcItems()
+        return
+
+    }
+
 }
 
 renderer.domElement.addEventListener( "mousemove", onMouseMove )
+
+const button = document.getElementById('properties')
+button.addEventListener("click", async () => await getElementPsetProperties(2529) )
+
+window.getPropertySets = async function getPropertySets(expressId){
+    
+    const psets = []
+    const elementData = await viewer.IFC.getProperties(0,expressId,true)
+
+    elementData.psets.forEach(pset => {
+
+        psets.push(pset)
+
+    });
+
+    return psets
+
+}
+
+window.getPsetProperties = function getPsetProperties(pset){
+
+    const properties = []
+
+    pset.HasProperties.forEach(async property => {
+        properties.push(await viewer.IFC.getProperties(0,property.value,true))
+    });
+
+    return properties
+
+}
+
+window.getElementPsetProperties = async function getElementPsetProperties(expressId){
+
+    const properties = []
+    const psets = await getPropertySets(expressId)
+
+    /*psets.forEach( pset => {
+        //console.log(pset)
+        const psetProperties = getPsetProperties(pset)
+        console.log(psetProperties)
+        psetProperties.forEach( property => {
+            properties.push(property)
+        });
+    });*/
+
+    console.log(getPsetProperties(psets[0]))
+    return getPsetProperties(psets[0])
+
+}
+
+async function evalProperty(modelId, expressId, leftSide, condition, rightSide){
+
+    const property = await viewer.IFC.getProperties(modelId, expressId, false, false)
+
+    let test = false 
+    if (property.Name.value == rightSide) {
+     
+        test = true
+
+    }
+
+    return test
+
+}
