@@ -121404,7 +121404,7 @@ function onMouseMove (e) {
 
         const expressId = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex);
         viewer.IFC.selector.pickIfcItemsByID(0,[expressId]);
-        //console.log(expressId)
+        console.log(expressId);
         return
 
     }
@@ -121421,12 +121421,21 @@ function onMouseMove (e) {
 renderer.domElement.addEventListener( "mousemove", onMouseMove );
 
 const button = document.getElementById('properties');
-button.addEventListener("click", async () => await getElementPsetProperties(2529) );
+button.addEventListener("click", async () => console.log(await hasProperty(0,2979)) );
 
-window.getPropertySets = async function getPropertySets(expressId){
+//Custom forEach to handle promises
+async function asyncForEach(array, callback){
+
+    for (let index = 0; index < array.length; index++) {
+        await callback(array[index], index, array);
+    }
+
+}
+
+async function getPropertySets(modelId, expressId){
     
     const psets = [];
-    const elementData = await viewer.IFC.getProperties(0,expressId,true);
+    const elementData = await viewer.IFC.getProperties(modelId,expressId,true);
 
     elementData.psets.forEach(pset => {
 
@@ -121436,33 +121445,60 @@ window.getPropertySets = async function getPropertySets(expressId){
 
     return psets
 
-};
+}
 
-window.getPsetProperties = function getPsetProperties(pset){
+async function getPsetProperties(pset){
 
     const properties = [];
 
-    pset.HasProperties.forEach(async property => {
+    await asyncForEach(pset.HasProperties, async property => {
         properties.push(await viewer.IFC.getProperties(0,property.value,true));
+    });
+    
+    return properties
+
+}
+
+async function getElementPsetProperties(modelId, expressId){
+
+    const properties = [];
+    const psets = await getPropertySets(modelId, expressId);
+
+    await asyncForEach(psets, async pset => {
+        const psetProperties = await getPsetProperties(pset);
+        psetProperties.forEach( property => {
+            properties.push(property);
+        });
     });
 
     return properties
 
-};
+}
 
-window.getElementPsetProperties = async function getElementPsetProperties(expressId){
-    const psets = await getPropertySets(expressId);
+async function evalProperty(ifcProperty, leftSide, condition, rightSide){
 
-    /*psets.forEach( pset => {
-        //console.log(pset)
-        const psetProperties = getPsetProperties(pset)
-        console.log(psetProperties)
-        psetProperties.forEach( property => {
-            properties.push(property)
-        });
-    });*/
+    let test = false; 
+    if (ifcProperty.Name.value == rightSide) {
+     
+        test = true;
 
-    console.log(getPsetProperties(psets[0]));
-    return getPsetProperties(psets[0])
+    }
 
-};
+    return test
+
+}
+
+async function hasProperty(modelId, expressId){
+
+    const properties = await getElementPsetProperties(modelId, expressId);
+    let test = false;
+
+    await asyncForEach(properties, async property => {
+        if (await evalProperty(property, "", "", "Longitud") == true) {
+            test = true;
+        }
+    });
+
+    return test
+
+}
