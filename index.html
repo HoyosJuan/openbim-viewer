@@ -7,9 +7,18 @@
     <title>Document</title>
 </head>
 <body>
-    <input type="file" id="file-input">
-    <button id="properties">Dale</button>
+    <!--<input type="file" id="file-input">-->
+    <!--<button id="properties">Dale</button>-->
     <select name="properties" id="propertiesList"></select>
+    <select name="operators" id="operators" style="width: 150px;">
+        <option value="equals">equals</option>
+        <option value="greater">greater than</option>
+        <option value="greaterEqual">greater than or equal to</option>
+        <option value="less">less</option>
+        <option value="lessEqual">less than or equal to</option>
+        <option value="contains">contains</option>
+    </select>
+    <input type="text" id="searchField" style="width: 200px;">
     <div id="viewer-container" style="height: 800px;"></div>
     <script src="./bundle.js" type="module"></script>
 </body> 

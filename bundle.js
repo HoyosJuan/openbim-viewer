@@ -121380,7 +121380,9 @@ function loadIFC( url ) {
         ifcModels.push(model);
         model.modelData = {};
         await getModelProperties(model.modelID);
+        fillSelectTag("propertiesList", Object.keys(model.modelData));
         
+        viewer.context.fitToFrame();
         console.log("Model Loaded");
 
         const edges = new EdgesGeometry( model.geometry );
@@ -121424,10 +121426,26 @@ function onMouseMove (e) {
 
 renderer.domElement.addEventListener( "mousemove", onMouseMove );
 
-const button = document.getElementById('properties');
 const propertiesSelector = document.getElementById("propertiesList");
-propertiesSelector.addEventListener("change", () => console.log("asd"));
-button.addEventListener("click", () => fillSelectTag("propertiesList", Object.keys(viewer.context.items.ifcModels[0].modelData)) );
+
+const mat = new MeshLambertMaterial({
+    transparent: true,
+    opacity: 1,
+    color: "CornflowerBlue",
+    depthTest: true
+});
+
+/*propertiesSelector.addEventListener("change", (e) => {
+    const selectedOption = e.target.options[e.target.selectedIndex].value
+    createSubset(ifcModels[0].modelData[selectedOption].elements)
+    //createSubset(ifcModels[0].modelData[selectedOption].values["M-1"])
+})*/
+
+//Handle user searches
+const searchField = document.getElementById("searchField");
+searchField.addEventListener("change", (e) => {
+    createSubset(ifcModels[0].modelData[propertiesSelector.value].values[e.target.value]);
+});
 
 //-------START CUSTOM BASIC FUNCTIONS
 
@@ -121440,11 +121458,6 @@ async function asyncForEach(array, callback){
 
 }
 
-function removeDuplicates(array) {
-    return array.filter((item,
-        index) => array.indexOf(item) === index);
-}
-
 async function getModelProperties(modelID) {
     
     const spatialStructure = await viewer.IFC.getSpatialStructure(modelID);
@@ -121455,8 +121468,6 @@ async function getModelProperties(modelID) {
             modelElements.push(element.expressID);
         });
     });
-
-    //const testList = [modelElements[6], modelElements[210]]
     const modelData = {};
 
     await asyncForEach(modelElements, async expressID => {
@@ -121469,25 +121480,27 @@ async function getModelProperties(modelID) {
             pset.HasProperties.forEach(property => {
                 //console.log(property)
                 const propertyName = property.Name.value;
+                const propertyValue = property.NominalValue.value;
+
                 if (propertyName in modelData) {
                     modelData[propertyName].elements.push(expressID);
-                    modelData[propertyName].values.push(property.NominalValue.value);
+                    if (propertyValue in modelData[propertyName].values) {
+                        modelData[propertyName].values[propertyValue].push(expressID);
+                    } else {
+                        modelData[propertyName].values[propertyValue] = [expressID];
+                    }
                 } else {
-                    modelData[propertyName] = { "elements": [], "values": []};
+                    modelData[propertyName] = { "elements": [], "values": {} };
                     modelData[propertyName].elements.push(expressID);
-                    modelData[propertyName].values.push(property.NominalValue.value);
+                    modelData[propertyName].values[propertyValue] = [expressID];
                 }
 
             });
         });
     });
 
-    for (const property in modelData) {
-        modelData[property].elements = removeDuplicates(modelData[property].elements);
-        modelData[property].values = removeDuplicates(modelData[property].values);
-    }
-
     ifcModels[modelID].modelData = modelData;
+    ifcModels[modelID].modelElements = modelElements;
 
     return modelData
 }
@@ -121503,5 +121516,20 @@ function fillSelectTag(domElementID, list) {
     });
 
     return element
+
+}
+
+function createSubset (ids) {
+    
+    const subsetConfig = {
+        modelID: 0,
+        ids: ids,
+        //material: viewer.IFC.selector.defSelectMat,
+        material: mat,
+        scene: scene,
+        removePrevious: true
+    };
+
+    viewer.IFC.loader.ifcManager.subsets.createSubset(subsetConfig);
 
 }
