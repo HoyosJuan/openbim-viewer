@@ -121351,26 +121351,18 @@ const renderer = viewer.context.getRenderer();
 const raycaster = viewer.context.items.components[6].raycaster;
 const camera = viewer.context.getCamera();
 const pointer = new Vector2();
+const mat = new MeshLambertMaterial({
+    transparent: true,
+    opacity: 1,
+    color: "CornflowerBlue",
+    depthTest: true
+});
 
 //Customize the viewer look
-const grid = viewer.grid.grid; //Access the THREE.js grid element to manipulate it.
+const grid = viewer.grid.grid;
 grid.material.color = {r: 0.8, g: 0.8, b: 0.8};
 grid.material.transparent = true;
 grid.material.opacity = 0.15;
-
-/*//Let the user select its own files
-const input = document.getElementById("file-input")
-input.addEventListener("change",
-
-  async (changed) => {
-   
-    const file = changed.target.files[0];
-    const ifcURL = URL.createObjectURL(file);
-    viewer.IFC.loadIfcUrl(ifcURL, true);
-
-  },
-  false
-)*/
 
 function loadIFC( url ) {
 
@@ -121426,26 +121418,41 @@ function onMouseMove (e) {
 
 renderer.domElement.addEventListener( "mousemove", onMouseMove );
 
+
+//------START SEARCH FUNCTIONALITY
+
 const propertiesSelector = document.getElementById("propertiesList");
-
-const mat = new MeshLambertMaterial({
-    transparent: true,
-    opacity: 1,
-    color: "CornflowerBlue",
-    depthTest: true
-});
-
-/*propertiesSelector.addEventListener("change", (e) => {
-    const selectedOption = e.target.options[e.target.selectedIndex].value
-    createSubset(ifcModels[0].modelData[selectedOption].elements)
-    //createSubset(ifcModels[0].modelData[selectedOption].values["M-1"])
-})*/
-
-//Handle user searches
+document.getElementById("operators");
 const searchField = document.getElementById("searchField");
-searchField.addEventListener("change", (e) => {
-    createSubset(ifcModels[0].modelData[propertiesSelector.value].values[e.target.value]);
+const searchFieldList = document.getElementById("searchFieldList");
+const saveQuery = document.getElementById("saveQuery");
+
+propertiesSelector.addEventListener("change", (e) => {
+    removeAllChildNodes(searchFieldList);
+    searchField.value = "";
+    const possibleOptions = ifcModels[0].modelData[propertiesSelector.value].values;
+    for (value in possibleOptions) {
+        const option = document.createElement("option");
+        option.text = value;
+        searchFieldList.append(option);
+    }
 });
+
+saveQuery.addEventListener("click", (e) => {
+    
+    //if (searchField.value == "") {return}
+    //const ids = querySearch("(['Nivel' . '1'] and ['Marca' = 'M-2']) or (['Nivel' . '2'])")
+    //const ids = querySearch("(['Nivel' = 'Nivel 1'])")
+    const ids = querySearch("(['Nivel' . '1'] or ['Nivel' . '2'])");
+    if (ids == []) {return}
+    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat);
+    querySelection.newSelection(0, ids, true);
+    /*querySelection.type = "custom"
+    querySelection.name = "Nivel 01"*/
+});
+
+//------END SEARCH FUNCTIONALITY
+
 
 //-------START CUSTOM BASIC FUNCTIONS
 
@@ -121455,6 +121462,21 @@ async function asyncForEach(array, callback){
     for (let index = 0; index < array.length; index++) {
         await callback(array[index], index, array);
     }
+
+}
+
+//Remove all child nodes from a given DOM Element
+function removeAllChildNodes(parent) {
+    while (parent.firstChild) {
+        parent.removeChild(parent.firstChild);
+    }
+}
+
+//Returns the intersection of two arrays
+function arrayOperator (arrayA, arrayB, operator){
+
+    if (operator == "and") {return arrayA.filter(x => arrayB.includes(x))}
+    if (operator == "or") {return [...new Set([...arrayA, ...arrayB])]}
 
 }
 
@@ -121512,24 +121534,117 @@ function fillSelectTag(domElementID, list) {
     list.forEach(value => {
         const option = document.createElement("option");
         option.text = value;
-        element.add(option);
+        element.append(option);
     });
 
     return element
 
 }
 
-function createSubset (ids) {
+function querySearch(query) {
     
-    const subsetConfig = {
-        modelID: 0,
-        ids: ids,
-        //material: viewer.IFC.selector.defSelectMat,
-        material: mat,
-        scene: scene,
-        removePrevious: true
-    };
+    let result = [];
+    
+    const brokenQuery = query.split(/\(([^)]+)\)/); //Splits everything between parenthesis
+    const queryGroups = [];
+    const queryOperators = ["or"];
 
-    viewer.IFC.loader.ifcManager.subsets.createSubset(subsetConfig);
+    for (let i=0; i<brokenQuery.length; i++) {
+        if (brokenQuery[i] != "") {
+            if (i % 2 == 0) {
+                queryOperators.push(brokenQuery[i].replace(/\s+/g, ''));
+            } else {
+                queryGroups.push(brokenQuery[i]);
+            }
+        }
+    }
+
+    //console.log(queryGroups)
+    //console.log(queryOperators)
+
+    queryGroups.forEach( (queryGroup, i) => {
+        
+        let groupResult = [];
+
+        const brokenGroup = queryGroup.split(/\[([^\]]+)\]/); //Splits everything between square brackets
+        const groupSearches = [];
+        const groupOperators = ["or"];
+
+        for (let i=0; i<brokenGroup.length; i++) {
+            if (brokenGroup[i] != "") {
+                if (i % 2 == 0) {
+                    groupOperators.push(brokenGroup[i].replace(/\s+/g, ''));
+                } else {
+                    groupSearches.push(brokenGroup[i]);
+                }
+            }
+        }
+
+        //console.log(groupSearches)
+        //console.log(groupOperators)
+        
+        groupSearches.forEach( (search, i) => {
+            
+            const brokenSearch = search.split(/\'([^']+)\'/g);
+            const property = brokenSearch[1];
+            const operator = brokenSearch[2].replace(/\s+/g, '');
+            const value = brokenSearch[3];
+            const queryValues = ifcModels[0].modelData[property].values;
+
+            let localSearchResult = [];
+            for (const currentValue in queryValues) {
+                if (evalProperty(currentValue, operator, value) == true) {
+                    localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue], "or");
+                }
+            }
+
+            groupResult = arrayOperator(groupResult, localSearchResult, groupOperators[i]);
+            
+        });
+
+        result = arrayOperator(result, groupResult, queryOperators[i]);
+
+    });
+
+    return result
 
 }
+
+function evalProperty(propertyValue, operator, value){
+
+    const operatorFunctions = {
+        "=": function equals() {
+            return propertyValue == value
+        },
+        "!=": function notEqual(){
+            return propertyValue != value
+        },
+        ".": function contains(){
+            return propertyValue.includes(value)
+        },
+        ">": function greater(){
+            return propertyValue > value
+        },
+        ">=": function greaterEqual(){
+            return propertyValue >= value
+        },
+        "<": function less(){
+            return propertyValue < value
+        },
+        "<=": function lessEqual(){
+            return propertyValue <= value
+        },
+        "sw": function startsWith(){
+            return
+        }
+    };
+
+    return operatorFunctions[operator]()
+
+}
+
+//-----TESTING FUNCTIONALITIES
+
+//viewer.clipper.createFromNormalAndCoplanarPoint(new THREE.Vector3(0,-1,0), new THREE.Vector3(0,3,0), false)
+
+//-----TESTING FUNCTIONALITIES

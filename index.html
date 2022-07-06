@@ -4,22 +4,48 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <link rel="stylesheet" href="styles.css">
+    <title>OpenBIM Viewer</title>
 </head>
 <body>
-    <!--<input type="file" id="file-input">-->
-    <!--<button id="properties">Dale</button>-->
-    <select name="properties" id="propertiesList"></select>
-    <select name="operators" id="operators" style="width: 150px;">
-        <option value="equals">equals</option>
-        <option value="greater">greater than</option>
-        <option value="greaterEqual">greater than or equal to</option>
-        <option value="less">less</option>
-        <option value="lessEqual">less than or equal to</option>
-        <option value="contains">contains</option>
-    </select>
-    <input type="text" id="searchField" style="width: 200px;">
-    <div id="viewer-container" style="height: 800px;"></div>
-    <script src="./bundle.js" type="module"></script>
-</body> 
+    
+    <div class="container">
+        <div class="header">
+            <select name="properties" id="propertiesList"></select>
+            
+            <select name="operators" id="operators" style="width: 80px;">
+                <option value="=">=</option>
+                <option value="!=">!=</option>
+                <option value="sw">starts with</option>
+                <option value=">">></option>
+                <option value=">=">>=</option>
+                <option value="<"><</option>
+                <option value="<="><=</option>
+                <option value=".">contains</option>
+            </select>
+            
+            <input type="text" id="searchField" list="searchFieldList" style="width: 200px;">
+        
+            <datalist id="searchFieldList"></datalist>
+        
+            <button id="saveQuery">Save Query</button>
+
+            <select name="searches" id="searches">
+                <option value="1">1</option>
+                <option value="2">2</option>
+            </select>
+        
+            <!-- <div id="viewer-container" style="height: 800px;"></div> -->
+
+        </div>
+        <div class="sidebar">
+
+            <button style="height: 40px;">C</button>
+
+        </div>
+        <div id="viewer-container"></div>
+    </div>
+    
+    <script src="./bundle.js"></script>
+</body>
 </html>
