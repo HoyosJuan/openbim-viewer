@@ -44,7 +44,8 @@ function loadIFC( url ) {
         ifcModels.push(model)
         model.modelData = {}
         await getModelProperties(model.modelID)
-        fillSelectTag("propertiesList", Object.keys(model.modelData))
+        const propertiesList = document.getElementById("propertiesList")
+        fillSelectTag(propertiesList, Object.keys(model.modelData))
         
         viewer.context.fitToFrame()
         console.log("Model Loaded")
@@ -98,6 +99,7 @@ const operatorsSelector = document.getElementById("operators")
 const searchField = document.getElementById("searchField")
 const searchFieldList = document.getElementById("searchFieldList")
 const saveQuery = document.getElementById("saveQuery")
+const queryField = document.getElementById("queryField")
 
 propertiesSelector.addEventListener("change", (e) => {
     removeAllChildNodes(searchFieldList)
@@ -115,10 +117,11 @@ saveQuery.addEventListener("click", (e) => {
     //if (searchField.value == "") {return}
     //const ids = querySearch("(['Nivel' . '1'] and ['Marca' = 'M-2']) or (['Nivel' . '2'])")
     //const ids = querySearch("(['Nivel' = 'Nivel 1'])")
-    const ids = querySearch("(['Nivel' . '1'] or ['Nivel' . '2'])")
+    //const ids = querySearch("(['Nivel' . '1'] or ['Nivel' . '2'])")
+    const ids = querySearch(queryField.value)
     if (ids == []) {return}
     const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat)
-    querySelection.newSelection(0, ids, true)
+    querySelection.pickByID(0, ids, true, true)
     /*querySelection.type = "custom"
     querySelection.name = "Nivel 01"*/
 })
@@ -158,53 +161,12 @@ function mergeObjects(objects){
 //Returns the intersection of two arrays
 function arrayOperator (arrayA, arrayB, operator){
 
-    if (operator == "and") {return arrayA.filter(x => arrayB.includes(x))}
-    if (operator == "or") {return [...new Set([...arrayA, ...arrayB])]}
-
-}
-
-function arrayEvenOdd(array) {
-
-    const oddOnes = []
-    const evenOnes = []
-
-    for (var i=0; i<array.length; i++) {
-        (i % 2 == 0 ? evenOnes : oddOnes).push(array[i])
-    }
-
-    return [evenOnes, oddOnes]
+    if (operator == "AND") {return arrayA.filter(x => arrayB.includes(x))}
+    if (operator == "OR") {return [...new Set([...arrayA, ...arrayB])]}
 
 }
 
 //-------END CUSTOM BASIC FUNCTIONS
-
-async function getPsetProperties(pset){
-
-    const properties = []
-
-    await asyncForEach(pset.HasProperties, async property => {
-        properties.push(await viewer.IFC.getProperties(0,property.value,true))
-    })
-    
-    return properties
-
-}
-
-async function getElementPsetProperties(modelID, expressID){
-
-    const properties = []
-    const psets = await viewer.IFC.loader.ifcManager.getPropertySets(modelID, expressID, true)
-
-    await asyncForEach(psets, async pset => {
-        const psetProperties = await getPsetProperties(pset)
-        psetProperties.forEach( property => {
-            properties.push(property)
-        });
-    })
-
-    return properties
-
-}
 
 async function getModelProperties(modelID) {
     
@@ -255,17 +217,16 @@ async function getModelProperties(modelID) {
     return modelData
 }
 
-function fillSelectTag(domElementID, list) {
-
-    const element = document.getElementById(domElementID);
+function fillSelectTag(domElement, list) {
 
     list.forEach(value => {
-        const option = document.createElement("option");
-        option.text = value;
-        element.append(option);
+        const option = document.createElement("option")
+        option.text = value
+        option.value = value
+        domElement.append(option)
     });
 
-    return element
+    return domElement
 
 }
 
@@ -275,7 +236,7 @@ function querySearch(query) {
     
     const brokenQuery = query.split(/\(([^)]+)\)/) //Splits everything between parenthesis
     const queryGroups = []
-    const queryOperators = ["or"]
+    const queryOperators = ["OR"]
 
     for (let i=0; i<brokenQuery.length; i++) {
         if (brokenQuery[i] != "") {
@@ -296,7 +257,7 @@ function querySearch(query) {
 
         const brokenGroup = queryGroup.split(/\[([^\]]+)\]/) //Splits everything between square brackets
         const groupSearches = []
-        const groupOperators = ["or"]
+        const groupOperators = ["OR"]
 
         for (let i=0; i<brokenGroup.length; i++) {
             if (brokenGroup[i] != "") {
@@ -322,7 +283,7 @@ function querySearch(query) {
             let localSearchResult = []
             for (const currentValue in queryValues) {
                 if (evalProperty(currentValue, operator, value) == true) {
-                    localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue], "or")
+                    localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue], "OR")
                 }
             }
 
@@ -363,13 +324,127 @@ function evalProperty(propertyValue, operator, value){
             return propertyValue <= value
         },
         "sw": function startsWith(){
-            return
+            return propertyValue.startsWith(value)
         }
     }
 
     return operatorFunctions[operator]()
 
 }
+
+const queryEditor = document.getElementById("queryEditor")
+
+function createQueryGroup(container) {
+    
+    const queryGroup = document.createElement("div")
+    queryGroup.className = "queryGroup"
+    queryGroup.setAttribute("data-type", "queryGroup")
+    container.append(queryGroup)
+
+    const newRuleButton = document.createElement("button")
+    newRuleButton.style.height = "40px"
+    newRuleButton.innerHTML = "Add Rule"
+    queryGroup.append(newRuleButton)
+
+    return queryGroup
+
+}
+
+function createQueryEvaluation(container) {
+
+    const queryEvaluation = document.createElement("div")
+    queryEvaluation.className = "queryEvaluation"
+    queryEvaluation.setAttribute("data-type", "queryEvaluation")
+    container.append(queryEvaluation)
+
+    const propertySelector = document.createElement("select")
+    propertySelector.style.width = "100%"
+    propertySelector.setAttribute("data-type", "queryProperty")
+
+    const conditionSelector = document.createElement("select")
+    conditionSelector.style.width = "100px"
+    conditionSelector.setAttribute("data-type", "queryCondition")
+    fillSelectTag(conditionSelector, ["=", "!=", "sw", ">", ">=", "<", "<=", "."])
+
+    const valueInput = document.createElement("input")
+    valueInput.style.width = "100%"
+    valueInput.setAttribute("data-type", "queryValue")
+
+    queryEvaluation.append(propertySelector, conditionSelector, valueInput)
+
+    return queryEvaluation
+
+}
+
+function createQueryOperator(container) {
+
+    const queryOperator = document.createElement("select")
+    queryOperator.setAttribute("data-type", "queryOperator")
+    queryOperator.style.height = "40px"
+    fillSelectTag(queryOperator, ["AND","OR"])
+    container.append(queryOperator)
+
+    return queryOperator
+
+}
+
+createQueryOperator(queryEditor)
+const queryGroup = createQueryGroup(queryEditor)
+createQueryEvaluation(queryGroup)
+createQueryOperator(queryGroup)
+createQueryEvaluation(queryGroup)
+
+function queryString(queryContainer) {
+
+    let queryString = ""
+
+    const queryStringFunctions = {
+        "queryEvaluation": (domElement) => {
+
+            let localQueryString = "["
+            Array.from(domElement.children).forEach( (component, i) => {
+                if (i != 1) {
+                    localQueryString += "'" + component.value + "'"
+                } else {
+                    localQueryString += " " + component.value + " "
+                }
+            } )
+            localQueryString += "]"
+            queryString += localQueryString
+
+        },
+        "queryGroup": (domElement) => {
+
+            queryString += "("
+            const domElementChildren = Array.from(domElement.children)
+            
+            domElementChildren.forEach(child => {
+        
+                if (child.getAttribute("data-type") != null) {
+                    queryStringFunctions[child.getAttribute("data-type")](child)
+                }
+            
+            });
+
+            queryString += ")"
+
+        },
+        "queryOperator": (domElement) => {
+
+            queryString += " " + domElement.value + " "
+
+        }
+    }
+
+    queryStringFunctions["queryGroup"](queryContainer)
+
+    //queryString += ")"
+    return queryString
+
+}
+
+console.log(queryString(queryEditor))
+
 
 //-----TESTING FUNCTIONALITIES
 
