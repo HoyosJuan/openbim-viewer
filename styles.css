@@ -21,7 +21,7 @@
   }
   
   .leftBar {
-    /*background: rgba(255, 0, 0);*/
+    background: #1D2733;
     grid-area: leftBar;
     display: flex;
     flex-direction: column;
@@ -30,6 +30,7 @@
   }
 
   .rightBar {
+    background: #1D2733;
     grid-area: rightBar;
     display: flex;
     flex-direction: column;
@@ -38,6 +39,7 @@
   }
   
   .header {
+    background: #1D2733;
     grid-area: header;
     display: flex;
     flex-direction: row;
@@ -53,7 +55,7 @@
     display: flex; 
     flex-direction: column;
     row-gap: 10px; 
-    padding: 20px 10px;
+    padding: 10px;
     border: 2px;
     border-style: dashed;
     border-color: gray;
@@ -64,6 +66,20 @@
     display: flex; 
     column-gap: 10px; 
     height: 40px;
+  }
+
+  #queryEditor {
+    display: flex;
+    flex-direction: column;
+    row-gap: 10px;
+    height: 100%;
+  }
+
+  #queryContainer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    row-gap: 10px;
   }
 
   select {

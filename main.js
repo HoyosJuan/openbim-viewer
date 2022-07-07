@@ -9,8 +9,8 @@ const viewer = window.viewer = new IfcViewerAPI({
     "backgroundColor": new THREE.Color("lightgray")
 })
 const ifc = viewer.IFC.loader.ifcManager
-viewer.axes.setAxes()
-viewer.grid.setGrid(200,300)
+//viewer.axes.setAxes()
+//viewer.grid.setGrid(200,300)
 
 //Modify some of the web-ifc-viewer defaults
 viewer.IFC.selector.defSelectMat.color = new THREE.Color("gold")
@@ -30,11 +30,17 @@ const mat = new THREE.MeshLambertMaterial({
     depthTest: true
 })
 
+const postProduction = viewer.context.renderer.postProduction
+/*postProduction.tryToInitialize()
+postProduction.addAntialiasPass()
+postProduction.active = true
+console.log(postProduction)*/
+
 //Customize the viewer look
-const grid = viewer.grid.grid
+/*const grid = viewer.grid.grid
 grid.material.color = {r: 0.8, g: 0.8, b: 0.8}
 grid.material.transparent = true
-grid.material.opacity = 0.15
+grid.material.opacity = 0.15*/
 
 function loadIFC( url ) {
 
@@ -45,13 +51,13 @@ function loadIFC( url ) {
         model.modelData = {}
         await getModelProperties(model.modelID)
         const propertiesList = document.getElementById("propertiesList")
-        fillSelectTag(propertiesList, Object.keys(model.modelData))
+        //fillSelectTag(propertiesList, Object.keys(model.modelData))
         
         viewer.context.fitToFrame()
         console.log("Model Loaded")
-
-        const edges = new THREE.EdgesGeometry( model.geometry );
+        
         const edgeMaterial = new THREE.LineBasicMaterial( { color: "Black"} )
+        const edges = new THREE.EdgesGeometry( model.geometry );
         edgeMaterial.transparent = true
         edgeMaterial.opacity = 0.3
         const line = new THREE.LineSegments( edges, edgeMaterial )
@@ -94,14 +100,12 @@ renderer.domElement.addEventListener( "mousemove", onMouseMove )
 
 //------START SEARCH FUNCTIONALITY
 
-const propertiesSelector = document.getElementById("propertiesList")
-const operatorsSelector = document.getElementById("operators")
 const searchField = document.getElementById("searchField")
 const searchFieldList = document.getElementById("searchFieldList")
-const saveQuery = document.getElementById("saveQuery")
+const testQuery = document.getElementById("testQuery")
 const queryField = document.getElementById("queryField")
 
-propertiesSelector.addEventListener("change", (e) => {
+/*propertiesSelector.addEventListener("change", (e) => {
     removeAllChildNodes(searchFieldList)
     searchField.value = ""
     const possibleOptions = ifcModels[0].modelData[propertiesSelector.value].values
@@ -110,9 +114,9 @@ propertiesSelector.addEventListener("change", (e) => {
         option.text = value;
         searchFieldList.append(option);
     }
-})
+})*/
 
-saveQuery.addEventListener("click", (e) => {
+testQuery.addEventListener("click", (e) => {
     
     //if (searchField.value == "") {return}
     //const ids = querySearch("(['Nivel' . '1'] and ['Marca' = 'M-2']) or (['Nivel' . '2'])")
@@ -332,19 +336,37 @@ function evalProperty(propertyValue, operator, value){
 
 }
 
-const queryEditor = document.getElementById("queryEditor")
+
+//------START QUERY SETS FUNCTIONALITY
+
+const queryContainer = document.getElementById("queryContainer")
 
 function createQueryGroup(container) {
     
     const queryGroup = document.createElement("div")
     queryGroup.className = "queryGroup"
-    queryGroup.setAttribute("data-type", "queryGroup")
+    queryGroup.setAttribute("data-queryComponent", "queryGroup")
     container.append(queryGroup)
 
     const newRuleButton = document.createElement("button")
     newRuleButton.style.height = "40px"
     newRuleButton.innerHTML = "Add Rule"
     queryGroup.append(newRuleButton)
+
+    newRuleButton.addEventListener("click", () => {
+
+        const queryContainerLength = Array.from(queryGroup.children).length
+        if (queryContainerLength <= 1) {
+            createQueryEvaluation(queryGroup)
+        } else {
+            createQueryOperator(queryGroup)
+            createQueryEvaluation(queryGroup)
+        }
+        queryField.value = queryString(queryContainer)
+    
+    })
+
+    createQueryEvaluation(queryGroup)
 
     return queryGroup
 
@@ -354,21 +376,31 @@ function createQueryEvaluation(container) {
 
     const queryEvaluation = document.createElement("div")
     queryEvaluation.className = "queryEvaluation"
-    queryEvaluation.setAttribute("data-type", "queryEvaluation")
+    queryEvaluation.setAttribute("data-queryComponent", "queryEvaluation")
     container.append(queryEvaluation)
 
-    const propertySelector = document.createElement("select")
+    //const propertySelector = document.createElement("select")
+    const propertySelector = document.createElement("input")
     propertySelector.style.width = "100%"
-    propertySelector.setAttribute("data-type", "queryProperty")
+    propertySelector.setAttribute("data-queryComponent", "queryProperty")
+    propertySelector.addEventListener("keyup", () => {
+        queryField.value = queryString(queryContainer)
+    })
 
     const conditionSelector = document.createElement("select")
     conditionSelector.style.width = "100px"
-    conditionSelector.setAttribute("data-type", "queryCondition")
+    conditionSelector.setAttribute("data-queryComponent", "queryCondition")
     fillSelectTag(conditionSelector, ["=", "!=", "sw", ">", ">=", "<", "<=", "."])
+    conditionSelector.addEventListener("change", () => {
+        queryField.value = queryString(queryContainer)
+    })
 
     const valueInput = document.createElement("input")
     valueInput.style.width = "100%"
-    valueInput.setAttribute("data-type", "queryValue")
+    valueInput.setAttribute("data-queryComponent", "queryValue")
+    valueInput.addEventListener("keyup", () => {
+        queryField.value = queryString(queryContainer)
+    })
 
     queryEvaluation.append(propertySelector, conditionSelector, valueInput)
 
@@ -379,7 +411,7 @@ function createQueryEvaluation(container) {
 function createQueryOperator(container) {
 
     const queryOperator = document.createElement("select")
-    queryOperator.setAttribute("data-type", "queryOperator")
+    queryOperator.setAttribute("data-queryComponent", "queryOperator")
     queryOperator.style.height = "40px"
     fillSelectTag(queryOperator, ["AND","OR"])
     container.append(queryOperator)
@@ -388,20 +420,22 @@ function createQueryOperator(container) {
 
 }
 
-createQueryOperator(queryEditor)
-const queryGroup = createQueryGroup(queryEditor)
-createQueryEvaluation(queryGroup)
-createQueryOperator(queryGroup)
-createQueryEvaluation(queryGroup)
-
-function queryString(queryContainer) {
+function queryString(container) {
 
     let queryString = ""
 
     const queryStringFunctions = {
         "queryEvaluation": (domElement) => {
 
-            let localQueryString = "["
+            let localQueryString = ""
+            const queryComponent = domElement.parentElement.getAttribute("data-queryComponent")
+            
+            if (queryComponent == "queryGroup"){
+                localQueryString += "["
+            } else {
+                localQueryString += "(["
+            }
+            
             Array.from(domElement.children).forEach( (component, i) => {
                 if (i != 1) {
                     localQueryString += "'" + component.value + "'"
@@ -409,7 +443,14 @@ function queryString(queryContainer) {
                     localQueryString += " " + component.value + " "
                 }
             } )
-            localQueryString += "]"
+            
+            
+            if (queryComponent == "queryGroup"){
+                localQueryString += "]"
+            } else {
+                localQueryString += "])"
+            }
+
             queryString += localQueryString
 
         },
@@ -420,8 +461,8 @@ function queryString(queryContainer) {
             
             domElementChildren.forEach(child => {
         
-                if (child.getAttribute("data-type") != null) {
-                    queryStringFunctions[child.getAttribute("data-type")](child)
+                if (child.getAttribute("data-queryComponent") != null) {
+                    queryStringFunctions[child.getAttribute("data-queryComponent")](child)
                 }
             
             });
@@ -436,15 +477,43 @@ function queryString(queryContainer) {
         }
     }
 
-    queryStringFunctions["queryGroup"](queryContainer)
+    queryStringFunctions["queryGroup"](container)
 
-    //queryString += ")"
-    return queryString
+    return queryString.replace(/\(\(+/g, '(').replace(/\)\)+/g, ')')
 
 }
 
-console.log(queryString(queryEditor))
+const addQueryRule = document.getElementById("addQueryRule")
+addQueryRule.addEventListener("click", () => {
 
+    const queryContainerLength = Array.from(queryContainer.children).length
+    if (queryContainerLength == 0) {
+        createQueryEvaluation(queryContainer)
+    } else {
+        createQueryOperator(queryContainer)
+        createQueryEvaluation(queryContainer)
+    }
+    queryField.value = queryString(queryContainer)
+
+})
+
+const addQueryGroup = document.getElementById("addQueryGroup")
+addQueryGroup.addEventListener("click", () => {
+
+    const queryContainerLength = Array.from(queryContainer.children).length
+    if (queryContainerLength == 0) {
+        createQueryGroup(queryContainer)
+    } else {
+        createQueryOperator(queryContainer)
+        createQueryGroup(queryContainer)
+    }
+    queryField.value = queryString(queryContainer)
+
+})
+
+queryField.value = queryString(queryContainer)
+
+//------END QUERY SETS FUNCTIONALITY
 
 //-----TESTING FUNCTIONALITIES
 

@@ -11,62 +11,38 @@
     
     <div class="container">
         <div class="header">
-            <select name="properties" id="propertiesList"></select>
             
-            <select name="operators" id="operators" style="width: 80px;">
-                <option value="=">=</option>
-                <option value="!=">!=</option>
-                <option value="sw">starts with</option>
-                <option value=">">></option>
-                <option value=">=">>=</option>
-                <option value="<"><</option>
-                <option value="<="><=</option>
-                <option value=".">contains</option>
-            </select>
-            
-            <input type="text" id="searchField" list="searchFieldList" style="width: 200px;">
-        
+            <!--<input type="text" id="searchField" list="searchFieldList" style="width: 200px;">
             <datalist id="searchFieldList"></datalist>
-        
-            <button id="saveQuery" style="width: 200px;">Save Query</button>
-
-            <input value="(['Nivel' . '1'] OR ['Nivel' . '2'])" type="text" id="queryField" style="width: 100%;">
-        
-            <!-- <div id="viewer-container" style="height: 800px;"></div> -->
+            <div id="viewer-container" style="height: 800px;"></div> -->
 
         </div>
+
         <div class="leftBar">
 
             <button style="height: 40px;">C</button>
 
         </div>
+
         <div id="viewer-container"></div>
 
-        <div class="rightBar" id="queryEditor"> <!--Query Editor Continer-->
+        <div class="rightBar">
 
-            <div style="height: 40px; display: flex; column-gap: 10px;">
-                <button style="width: 100%">Add Rule</button>
-                <button style="width: 100%">Add Group</button>
-            </div>
-            <div class="queryEvaluation" data-type="queryEvaluation">
-                <select data-type="queryProperty">
-                    <option>Marca</option>
-                    <option>Nivel</option>
-                </select>
-                <select style="width: 100px;" data-type="queryCondition">
-                    <option value="=">=</option>
-                    <option value="!=">!=</option>
-                    <option value="sw">starts with</option>
-                    <option value=">">></option>
-                    <option value=">=">>=</option>
-                    <option value="<"><</option>
-                    <option value="<="><=</option>
-                    <option value=".">contains</option>
-                </select>
-                <select data-type="queryValue">
-                    <option>M-1</option>
-                    <option>M-2</option>
-                </select>
+            <div id="queryEditor">
+                <input disabled type="text" id="queryField" style="width: 100%; height: 40px; text-align: center;">
+
+                <div style="height: 40px; display: flex; column-gap: 10px;">
+                    <button id="addQueryRule" style="width: 100%">Add Rule</button>
+                    <button id="addQueryGroup" style="width: 100%">Add Group</button>
+                </div>
+
+                <div id="queryContainer"></div>
+
+                <div style="height: 40px; display: flex; column-gap: 10px;">
+                    <button id="testQuery" style="width: 100%;">Test</button>
+                    <button disabled style="width: 100%">Save</button>
+                </div>
+
             </div>
 
         </div>
