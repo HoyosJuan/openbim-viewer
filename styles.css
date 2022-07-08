@@ -14,18 +14,18 @@
     width: 100vw;
     height: 100vh;
     display: grid;
-    grid-template-columns: 50px 1fr 400px;
+    grid-template-columns: 70px 1fr 400px;
     grid-template-rows: 50px 1fr;
     grid-template-areas: "header header header"
                         "leftBar viewer rightBar";
   }
   
   .leftBar {
-    background: #1D2733;
+    /*background: #1D2733;*/
     grid-area: leftBar;
     display: flex;
     flex-direction: column;
-    padding: 5px;
+    padding: 15px;
     row-gap: 10px;
   }
 

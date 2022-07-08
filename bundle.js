@@ -121348,14 +121348,15 @@ viewer.IFC.selector.defSelectMat.opacity = 0.25;
 const ifcModels = viewer.context.items.ifcModels;
 const scene = viewer.context.getScene();
 const renderer = viewer.context.getRenderer();
+renderer.setClearAlpha(1);
 const raycaster = viewer.context.items.components[6].raycaster;
 const camera = viewer.context.getCamera();
 const pointer = new Vector2();
 const mat = new MeshLambertMaterial({
     transparent: true,
-    opacity: 1,
+    opacity: 0.6,
     color: "CornflowerBlue",
-    depthTest: true
+    depthTest: false
 });
 
 viewer.context.renderer.postProduction;
@@ -121370,20 +121371,18 @@ grid.material.color = {r: 0.8, g: 0.8, b: 0.8}
 grid.material.transparent = true
 grid.material.opacity = 0.15*/
 
-function loadIFC( url ) {
+function loadIFC(url, parseData = false) {
 
-    viewer.IFC.loader.load( url, async (model) => {
+    viewer.IFC.loader.load( url, (model) => {
 
         scene.add(model);
         ifcModels.push(model);
         model.modelData = {};
-        await getModelProperties(model.modelID);
-        document.getElementById("propertiesList");
+        model.modelElements = {};
+        if (parseData) {getModelProperties(model.modelID);}
         //fillSelectTag(propertiesList, Object.keys(model.modelData))
         
-        viewer.context.fitToFrame();
-        console.log("Model Loaded");
-        
+        //Add edges to the model
         const edgeMaterial = new LineBasicMaterial( { color: "Black"} );
         const edges = new EdgesGeometry( model.geometry );
         edgeMaterial.transparent = true;
@@ -121391,12 +121390,16 @@ function loadIFC( url ) {
         const line = new LineSegments( edges, edgeMaterial );
         line.name = "ElementEdges";
         model.add( line );
+        
+        viewer.context.fitToFrame();
 
     });
 
 }
 
+//loadIFC("SIMPLE-IFC.ifc")
 loadIFC("SRR-CGC-T01-ZZZ-M3D-EST-001.ifc");
+//loadIFC("NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
 
 function onMouseMove (e) {
 
@@ -121428,8 +121431,6 @@ renderer.domElement.addEventListener( "mousemove", onMouseMove );
 
 //------START SEARCH FUNCTIONALITY
 
-document.getElementById("searchField");
-document.getElementById("searchFieldList");
 const testQuery = document.getElementById("testQuery");
 const queryField = document.getElementById("queryField");
 
@@ -121461,7 +121462,9 @@ testQuery.addEventListener("click", (e) => {
 //------END SEARCH FUNCTIONALITY
 
 
-//-------START CUSTOM BASIC FUNCTIONS
+//-------START CUSTOM BASIC FUNCTIONS-------
+//-------START CUSTOM BASIC FUNCTIONS-------
+//-------START CUSTOM BASIC FUNCTIONS-------
 
 //Custom forEach to handle promises
 async function asyncForEach(array, callback){
@@ -121480,55 +121483,11 @@ function arrayOperator (arrayA, arrayB, operator){
 
 }
 
-//-------END CUSTOM BASIC FUNCTIONS
-
-async function getModelProperties(modelID) {
-    
-    const spatialStructure = await viewer.IFC.getSpatialStructure(modelID);
-    const modelElements = [];
-    
-    spatialStructure.children[0].children[0].children.forEach(storey => {
-        storey.children.forEach(element => {
-            modelElements.push(element.expressID);
-        });
-    });
-    const modelData = {};
-
-    await asyncForEach(modelElements, async expressID => {
-
-        const psets = await viewer.IFC.loader.ifcManager.getPropertySets(modelID, expressID, true);
-        //console.log(psets)
-
-        psets.forEach(pset => {
-            //console.log(pset.HasProperties)
-            pset.HasProperties.forEach(property => {
-                //console.log(property)
-                const propertyName = property.Name.value;
-                const propertyValue = property.NominalValue.value;
-
-                if (propertyName in modelData) {
-                    modelData[propertyName].elements.push(expressID);
-                    if (propertyValue in modelData[propertyName].values) {
-                        modelData[propertyName].values[propertyValue].push(expressID);
-                    } else {
-                        modelData[propertyName].values[propertyValue] = [expressID];
-                    }
-                } else {
-                    modelData[propertyName] = { "elements": [], "values": {} };
-                    modelData[propertyName].elements.push(expressID);
-                    modelData[propertyName].values[propertyValue] = [expressID];
-                }
-
-            });
-        });
-    });
-
-    ifcModels[modelID].modelData = modelData;
-    ifcModels[modelID].modelElements = modelElements;
-
-    return modelData
-}
-
+/*
+This function takes a DOM Element with and adds new option tags
+to based on a given string. This is usefull to generate the possible
+options of HTML select tags.
+*/
 function fillSelectTag(domElement, list) {
 
     list.forEach(value => {
@@ -121541,6 +121500,125 @@ function fillSelectTag(domElement, list) {
     return domElement
 
 }
+
+//-------END CUSTOM BASIC FUNCTIONS-------
+//-------END CUSTOM BASIC FUNCTIONS-------
+//-------END CUSTOM BASIC FUNCTIONS-------
+
+//
+async function getModelProperties(modelID = 0) {
+    
+    /*
+    These are the two main variables that keep all the extracted data; 
+    they are stored on its own key inside the viewer models data, so 
+    they can be easily accessed everywhere.
+    */
+    const modelElements = ifcModels[modelID].modelElements = {};
+    const modelData = ifcModels[modelID].modelData = {};
+    
+    //Main function to store a property 
+    function storeProperty(elementExpressID, name, value, group) {
+
+        //Logic for storing data inside modelData object
+        if (name in modelData) {
+            modelData[name].elements.push(elementExpressID);
+            if (value in modelData[name].values) {
+                modelData[name].values[value].push(elementExpressID);
+            } else {
+                modelData[name].values[value] = [elementExpressID];
+            }
+        } else {
+            modelData[name] = { "elements": [], "values": {} };
+            modelData[name].elements.push(elementExpressID);
+            modelData[name].values[value] = [elementExpressID];
+        }
+
+        //Logic for storing data inside modelElements object
+        if (!(elementExpressID in modelElements)) {
+            modelElements[elementExpressID] = {};
+        }
+        modelElements[elementExpressID][name] = {};
+        modelElements[elementExpressID][name].value = value;
+        modelElements[elementExpressID][name].group = group;
+
+    }
+
+    //Functions for each type of ifc data
+    const dataExtraction = {
+
+        "IfcElementQuantity": (elementExpressID, quantitySet) => {
+            quantitySet.Quantities.forEach( quantity => {
+                const quantityType = quantity.constructor.name.replace(/IfcQuantity/,"");
+                const propertyName = quantity.Name.value;
+                const propertyValue = quantity[`${quantityType + "Value"}`].value;
+                storeProperty(elementExpressID, propertyName, propertyValue, quantitySet.Name.value);
+            });
+        },
+
+        "IfcPropertySet": (elementExpressID, propertySet) => {
+            propertySet.HasProperties.forEach(property => {
+                if (property.NominalValue == null) {return}
+                const propertyName = property.Name.value;
+                const propertyValue = property.NominalValue.value;
+                storeProperty(elementExpressID, propertyName, propertyValue, propertySet.Name.value);
+            });
+        }
+
+    };
+
+    //Get all expressIDs of the model elements
+    const spatialStructure = await viewer.IFC.getSpatialStructure(modelID);
+    const buildingStoreys = spatialStructure.children[0].children[0].children;
+    const ids = [];
+    buildingStoreys.forEach(storey => {
+        storey.children.forEach(element => {
+            modelElements[element.expressID] = {};
+            ids.push(element.expressID);
+        });
+    });
+
+    //Process all element data regarding its property sets and quantity sets
+    await asyncForEach(ids, async expressID => {
+
+        const psets = await ifc.getPropertySets(modelID, expressID, true);
+        psets.forEach(pset => {
+            dataExtraction[pset.constructor.name](expressID, pset);
+        });
+
+    });
+
+    //Process basic element data such as its name, type, global id, etc...
+    await asyncForEach(ids, async expressID => {
+
+        const dataToExtract = 
+        ["GlobalId", "Name", "ObjectType", 
+        "PredefinedType", "Tag"];
+
+        const basicData = await ifc.getItemProperties(modelID, expressID, false);
+        dataToExtract.forEach(data => {
+            if (basicData[data] == null) {return}
+            storeProperty(expressID, data, basicData[data].value, "General");
+        });
+        
+        const ifcType = ifc.getIfcType(modelID, expressID);
+        storeProperty(expressID, "IfcType", ifcType, "General");
+
+    });
+
+    return modelData
+}
+
+const parseDataButton = document.getElementById("parseData");
+parseDataButton.addEventListener("click", async () => {
+    await getModelProperties(0);
+    console.log("Properties parsed!");
+});
+
+//------START QUERY SETS FUNCTIONALITY------
+//------START QUERY SETS FUNCTIONALITY------
+//------START QUERY SETS FUNCTIONALITY------
+
+const queryContainer = document.getElementById("queryContainer");
 
 function querySearch(query) {
     
@@ -121638,16 +121716,12 @@ function evalProperty(propertyValue, operator, value){
         "sw": function startsWith(){
             return propertyValue.startsWith(value)
         }
+        
     };
 
     return operatorFunctions[operator]()
 
 }
-
-
-//------START QUERY SETS FUNCTIONALITY
-
-const queryContainer = document.getElementById("queryContainer");
 
 function createQueryGroup(container) {
     
@@ -121821,7 +121895,10 @@ addQueryGroup.addEventListener("click", () => {
 
 queryField.value = queryString(queryContainer);
 
-//------END QUERY SETS FUNCTIONALITY
+//------END QUERY SETS FUNCTIONALITY------
+//------END QUERY SETS FUNCTIONALITY------
+//------END QUERY SETS FUNCTIONALITY------
+
 
 //-----TESTING FUNCTIONALITIES
 
