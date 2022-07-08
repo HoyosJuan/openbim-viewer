@@ -121331,6 +121331,50 @@ class IfcViewerAPI {
     }
 }
 
+/**
+ * @description This applies AND/OR operators on two input arrays. 
+*/
+
+function arrayOperator (arrayA, arrayB, operator){
+
+    return {
+        "AND": arrayA.filter(x => arrayB.includes(x)),
+        "OR": [...new Set([...arrayA, ...arrayB])]
+    }
+
+}
+
+/**
+ * @description This function takes a DOM Element and adds new option tags
+based on a given array. This is usefull to generate the possible
+options of HTML select tags.
+*/
+
+function fillSelectTag(domElement, list) {
+
+    list.forEach(value => {
+        const option = document.createElement("option");
+        option.text = value;
+        option.value = value;
+        domElement.append(option);
+    });
+
+    return domElement
+
+}
+
+/**
+ * @description Custom forEach made to handle promises
+*/
+
+async function asyncForEach(array, callback){
+
+    for (let index = 0; index < array.length; index++) {
+        await callback(array[index], index, array);
+    }
+
+}
+
 const container = document.getElementById('viewer-container');
 const viewer = window.viewer = new IfcViewerAPI({ 
     "container": container,
@@ -121397,9 +121441,9 @@ function loadIFC(url, parseData = false) {
 
 }
 
-//loadIFC("SIMPLE-IFC.ifc")
-loadIFC("SRR-CGC-T01-ZZZ-M3D-EST-001.ifc");
-//loadIFC("NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
+//loadIFC("/IFC Files/SIMPLE-IFC.ifc")
+loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc");
+//loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
 
 function onMouseMove (e) {
 
@@ -121429,83 +121473,6 @@ function onMouseMove (e) {
 renderer.domElement.addEventListener( "mousemove", onMouseMove );
 
 
-//------START SEARCH FUNCTIONALITY
-
-const testQuery = document.getElementById("testQuery");
-const queryField = document.getElementById("queryField");
-
-/*propertiesSelector.addEventListener("change", (e) => {
-    removeAllChildNodes(searchFieldList)
-    searchField.value = ""
-    const possibleOptions = ifcModels[0].modelData[propertiesSelector.value].values
-    for (value in possibleOptions) {
-        const option = document.createElement("option");
-        option.text = value;
-        searchFieldList.append(option);
-    }
-})*/
-
-testQuery.addEventListener("click", (e) => {
-    
-    //if (searchField.value == "") {return}
-    //const ids = querySearch("(['Nivel' . '1'] and ['Marca' = 'M-2']) or (['Nivel' . '2'])")
-    //const ids = querySearch("(['Nivel' = 'Nivel 1'])")
-    //const ids = querySearch("(['Nivel' . '1'] or ['Nivel' . '2'])")
-    const ids = querySearch(queryField.value);
-    if (ids == []) {return}
-    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat);
-    querySelection.pickByID(0, ids, true, true);
-    /*querySelection.type = "custom"
-    querySelection.name = "Nivel 01"*/
-});
-
-//------END SEARCH FUNCTIONALITY
-
-
-//-------START CUSTOM BASIC FUNCTIONS-------
-//-------START CUSTOM BASIC FUNCTIONS-------
-//-------START CUSTOM BASIC FUNCTIONS-------
-
-//Custom forEach to handle promises
-async function asyncForEach(array, callback){
-
-    for (let index = 0; index < array.length; index++) {
-        await callback(array[index], index, array);
-    }
-
-}
-
-//Returns the intersection of two arrays
-function arrayOperator (arrayA, arrayB, operator){
-
-    if (operator == "AND") {return arrayA.filter(x => arrayB.includes(x))}
-    if (operator == "OR") {return [...new Set([...arrayA, ...arrayB])]}
-
-}
-
-/*
-This function takes a DOM Element with and adds new option tags
-to based on a given string. This is usefull to generate the possible
-options of HTML select tags.
-*/
-function fillSelectTag(domElement, list) {
-
-    list.forEach(value => {
-        const option = document.createElement("option");
-        option.text = value;
-        option.value = value;
-        domElement.append(option);
-    });
-
-    return domElement
-
-}
-
-//-------END CUSTOM BASIC FUNCTIONS-------
-//-------END CUSTOM BASIC FUNCTIONS-------
-//-------END CUSTOM BASIC FUNCTIONS-------
-
-//
 async function getModelProperties(modelID = 0) {
     
     /*
@@ -121619,6 +121586,24 @@ parseDataButton.addEventListener("click", async () => {
 //------START QUERY SETS FUNCTIONALITY------
 
 const queryContainer = document.getElementById("queryContainer");
+const testQuery = document.getElementById("testQuery");
+const queryField = document.getElementById("queryField");
+
+/*propertiesSelector.addEventListener("change", (e) => {
+    removeAllChildNodes(searchFieldList)
+    searchField.value = ""
+    const possibleOptions = ifcModels[0].modelData[propertiesSelector.value].values
+})*/
+
+testQuery.addEventListener("click", (e) => {
+    
+    const ids = querySearch(queryField.value);
+    if (ids == []) {return}
+    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat);
+    querySelection.pickByID(0, ids, true, true);
+    /*querySelection.type = "custom"
+    querySelection.name = "Nivel 01"*/
+});
 
 function querySearch(query) {
     
@@ -121637,9 +121622,6 @@ function querySearch(query) {
             }
         }
     }
-
-    //console.log(queryGroups)
-    //console.log(queryOperators)
 
     queryGroups.forEach( (queryGroup, i) => {
         
@@ -121673,15 +121655,15 @@ function querySearch(query) {
             let localSearchResult = [];
             for (const currentValue in queryValues) {
                 if (evalProperty(currentValue, operator, value) == true) {
-                    localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue], "OR");
+                    localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue])["OR"];
                 }
             }
 
-            groupResult = arrayOperator(groupResult, localSearchResult, groupOperators[i]);
+            groupResult = arrayOperator(groupResult, localSearchResult)[groupOperators[i]];
             
         });
 
-        result = arrayOperator(result, groupResult, queryOperators[i]);
+        result = arrayOperator(result, groupResult)[queryOperators[i]];
 
     });
 
@@ -121761,8 +121743,9 @@ function createQueryEvaluation(container) {
     queryEvaluation.setAttribute("data-queryComponent", "queryEvaluation");
     container.append(queryEvaluation);
 
-    //const propertySelector = document.createElement("select")
-    const propertySelector = document.createElement("input");
+    const propertySelector = document.createElement("select");
+    fillSelectTag(propertySelector, Object.keys(ifcModels[0].modelData));
+    //const propertySelector = document.createElement("input")
     propertySelector.style.width = "100%";
     propertySelector.setAttribute("data-queryComponent", "queryProperty");
     propertySelector.addEventListener("keyup", () => {
@@ -121802,6 +121785,10 @@ function createQueryOperator(container) {
 
 }
 
+/**
+ * @description This takes a container in which there is a query
+and transforms it into the format required to perform a querySearch.
+*/
 function queryString(container) {
 
     let queryString = "";
@@ -121868,19 +121855,25 @@ function queryString(container) {
 const addQueryRule = document.getElementById("addQueryRule");
 addQueryRule.addEventListener("click", () => {
 
-    const queryContainerLength = Array.from(queryContainer.children).length;
-    if (queryContainerLength == 0) {
-        createQueryEvaluation(queryContainer);
-    } else {
-        createQueryOperator(queryContainer);
-        createQueryEvaluation(queryContainer);
+    if (Object.keys(ifcModels[0].modelData).length === 0) {
+        console.log("Don't be idiot, you first need to parse all model data!");
+        return
     }
+    
+    const queryContainerLength = Array.from(queryContainer.children).length;
+    if (queryContainerLength != 0) {createQueryOperator(queryContainer);}
+    createQueryEvaluation(queryContainer);
     queryField.value = queryString(queryContainer);
 
 });
 
 const addQueryGroup = document.getElementById("addQueryGroup");
 addQueryGroup.addEventListener("click", () => {
+
+    if (Object.keys(ifcModels[0].modelData).length === 0) {
+        console.log("Don't be idiot, you first need to parse all model data!");
+        return
+    }
 
     const queryContainerLength = Array.from(queryContainer.children).length;
     if (queryContainerLength == 0) {
@@ -121901,7 +121894,11 @@ queryField.value = queryString(queryContainer);
 
 
 //-----TESTING FUNCTIONALITIES
+//-----TESTING FUNCTIONALITIES
+//-----TESTING FUNCTIONALITIES
 
 //viewer.clipper.createFromNormalAndCoplanarPoint(new THREE.Vector3(0,-1,0), new THREE.Vector3(0,3,0), false)
 
+//-----TESTING FUNCTIONALITIES
+//-----TESTING FUNCTIONALITIES
 //-----TESTING FUNCTIONALITIES

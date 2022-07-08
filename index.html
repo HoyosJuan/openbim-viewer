@@ -29,8 +29,10 @@
 
         <div class="rightBar">
 
-            <div id="queryEditor">
-                <input disabled type="text" id="queryField" style="width: 100%; height: 40px; text-align: center;">
+            <div id="queryEditor" style="display: visible;">
+
+                <h2 style="margin: 10px 0px;">Query Editor</h2>
+                <input disabled type="text" id="queryField" style="width: 100%; height: 50px; text-align: center;">
 
                 <div style="height: 40px; display: flex; column-gap: 10px;">
                     <button id="addQueryRule" style="width: 100%">Add Rule</button>
@@ -46,10 +48,14 @@
 
             </div>
 
+            <div id="propertiesPanel" style="display: none;"">
+                <h2 style="margin: 10px 0px;">Properties Panel</h2>
+            </div>
+
         </div>
 
     </div>
     
-    <script src="./bundle.js"></script>
+    <script type="module" src="./bundle.js"></script>
 </body>
 </html>
