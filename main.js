@@ -1,7 +1,10 @@
 import { IfcViewerAPI } from 'web-ifc-viewer'
 import * as THREE from "three"
 import { IfcSelection } from 'web-ifc-viewer/dist/components'
-import * as cf from './utils/customFunctions'
+import * as cf from './utils/custom-functions'
+import QueryEditor from "./utils/query-sets"
+
+
 
 const container = document.getElementById('viewer-container')
 const viewer = window.viewer = new IfcViewerAPI({ 
@@ -11,6 +14,9 @@ const viewer = window.viewer = new IfcViewerAPI({
 const ifc = viewer.IFC.loader.ifcManager
 //viewer.axes.setAxes()
 //viewer.grid.setGrid(200,300)
+
+const queryContainer = document.getElementById("queryContainer")
+const queryEditor = new QueryEditor(queryContainer, viewer)
 
 //Modify some of the web-ifc-viewer defaults
 viewer.IFC.selector.defSelectMat.color = new THREE.Color("gold")
@@ -80,14 +86,24 @@ function onMouseMove (e) {
     raycaster.setFromCamera( pointer, camera )
     const intersect = raycaster.intersectObjects( ifcModels, false )[0]
 
-    if ( intersect ) {
+    if ( intersect == null ) {
 
-        const expressId = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
-        viewer.IFC.selector.pickIfcItemsByID(0,[expressId])
-        //console.log(expressId)
+        viewer.IFC.selector.unpickIfcItems()
         return
 
     }
+
+    const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
+    viewer.IFC.selector.pickIfcItemsByID(0,[expressID])
+
+}
+
+function onMouseClick (e) {
+
+    pointer.x = ( (e.x - e.target.offsetLeft) / e.target.clientWidth ) * 2 - 1
+    pointer.y = - ( (e.y - e.target.offsetTop) / e.target.clientHeight ) * 2 + 1
+    raycaster.setFromCamera( pointer, camera )
+    const intersect = raycaster.intersectObjects( ifcModels, false )[0]
 
     if ( intersect == null ) {
 
@@ -96,10 +112,13 @@ function onMouseMove (e) {
 
     }
 
+    const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
+    renderElementProperties(propertiesPanel,0,expressID)
+
 }
 
-renderer.domElement.addEventListener( "mousemove", onMouseMove )
-
+renderer.domElement.addEventListener("mousemove", onMouseMove)
+renderer.domElement.addEventListener("mouseup", onMouseClick)
 
 async function getModelProperties(modelID = 0) {
     
@@ -213,7 +232,6 @@ parseDataButton.addEventListener("click", async () => {
 //------START QUERY SETS FUNCTIONALITY------
 //------START QUERY SETS FUNCTIONALITY------
 
-const queryContainer = document.getElementById("queryContainer")
 const testQuery = document.getElementById("testQuery")
 const queryField = document.getElementById("queryField")
 
@@ -224,259 +242,29 @@ const queryField = document.getElementById("queryField")
 })*/
 
 testQuery.addEventListener("click", (e) => {
-    
-    const ids = querySearch(queryField.value)
-    if (ids == []) {return}
-    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat)
-    querySelection.pickByID(0, ids, true, true)
-    /*querySelection.type = "custom"
-    querySelection.name = "Nivel 01"*/
+
+    createQuerySet("Custom Query", queryEditor.getQueryString())
+
 })
 
-function querySearch(query) {
-    
-    let result = []
-    
-    const brokenQuery = query.split(/\(([^)]+)\)/) //Splits everything between parenthesis
-    const queryGroups = []
-    const queryOperators = ["OR"]
-
-    for (let i=0; i<brokenQuery.length; i++) {
-        if (brokenQuery[i] != "") {
-            if (i % 2 == 0) {
-                queryOperators.push(brokenQuery[i].replace(/\s+/g, ''))
-            } else {
-                queryGroups.push(brokenQuery[i])
-            }
-        }
-    }
-
-    queryGroups.forEach( (queryGroup, i) => {
-        
-        let groupResult = []
-
-        const brokenGroup = queryGroup.split(/\[([^\]]+)\]/) //Splits everything between square brackets
-        const groupSearches = []
-        const groupOperators = ["OR"]
-
-        for (let i=0; i<brokenGroup.length; i++) {
-            if (brokenGroup[i] != "") {
-                if (i % 2 == 0) {
-                    groupOperators.push(brokenGroup[i].replace(/\s+/g, ''))
-                } else {
-                    groupSearches.push(brokenGroup[i])
-                }
-            }
-        }
-
-        //console.log(groupSearches)
-        //console.log(groupOperators)
-        
-        groupSearches.forEach( (search, i) => {
-            
-            const brokenSearch = search.split(/\'([^']+)\'/g)
-            const property = brokenSearch[1]
-            const operator = brokenSearch[2].replace(/\s+/g, '')
-            const value = brokenSearch[3]
-            const queryValues = ifcModels[0].modelData[property].values
-
-            let localSearchResult = []
-            for (const currentValue in queryValues) {
-                if (evalProperty(currentValue, operator, value) == true) {
-                    localSearchResult = cf.arrayOperator(localSearchResult, queryValues[currentValue])["OR"]
-                }
-            }
-
-            groupResult = cf.arrayOperator(groupResult, localSearchResult)[groupOperators[i]]
-            
-        })
-
-        result = cf.arrayOperator(result, groupResult)[queryOperators[i]]
-
-    })
-
-    return result
-
-}
-
-function evalProperty(propertyValue, operator, value){
-
-    const operatorFunctions = {
-        "=": function equals() {
-            return propertyValue == value
-        },
-        "!=": function notEqual(){
-            return propertyValue != value
-        },
-        ".": function contains(){
-            return propertyValue.includes(value)
-        },
-        ">": function greater(){
-            return propertyValue > value
-        },
-        ">=": function greaterEqual(){
-            return propertyValue >= value
-        },
-        "<": function less(){
-            return propertyValue < value
-        },
-        "<=": function lessEqual(){
-            return propertyValue <= value
-        },
-        "sw": function startsWith(){
-            return propertyValue.startsWith(value)
-        }
-        
-    }
-
-    return operatorFunctions[operator]()
-
-}
-
-function createQueryGroup(container) {
-    
-    const queryGroup = document.createElement("div")
-    queryGroup.className = "queryGroup"
-    queryGroup.setAttribute("data-queryComponent", "queryGroup")
-    container.append(queryGroup)
-
-    const newRuleButton = document.createElement("button")
-    newRuleButton.style.height = "40px"
-    newRuleButton.innerHTML = "Add Rule"
-    queryGroup.append(newRuleButton)
-
-    newRuleButton.addEventListener("click", () => {
-
-        const queryContainerLength = Array.from(queryGroup.children).length
-        if (queryContainerLength <= 1) {
-            createQueryEvaluation(queryGroup)
-        } else {
-            createQueryOperator(queryGroup)
-            createQueryEvaluation(queryGroup)
-        }
-        queryField.value = queryString(queryContainer)
-    
-    })
-
-    createQueryEvaluation(queryGroup)
-
-    return queryGroup
-
-}
-
-function createQueryEvaluation(container) {
-
-    const queryEvaluation = document.createElement("div")
-    queryEvaluation.className = "queryEvaluation"
-    queryEvaluation.setAttribute("data-queryComponent", "queryEvaluation")
-    container.append(queryEvaluation)
-
-    const propertySelector = document.createElement("select")
-    cf.fillSelectTag(propertySelector, Object.keys(ifcModels[0].modelData))
-    //const propertySelector = document.createElement("input")
-    propertySelector.style.width = "100%"
-    propertySelector.setAttribute("data-queryComponent", "queryProperty")
-    propertySelector.addEventListener("keyup", () => {
-        queryField.value = queryString(queryContainer)
-    })
-
-    const conditionSelector = document.createElement("select")
-    conditionSelector.style.width = "100px"
-    conditionSelector.setAttribute("data-queryComponent", "queryCondition")
-    cf.fillSelectTag(conditionSelector, ["=", "!=", "sw", ">", ">=", "<", "<=", "."])
-    conditionSelector.addEventListener("change", () => {
-        queryField.value = queryString(queryContainer)
-    })
-
-    const valueInput = document.createElement("input")
-    valueInput.style.width = "100%"
-    valueInput.setAttribute("data-queryComponent", "queryValue")
-    valueInput.addEventListener("keyup", () => {
-        queryField.value = queryString(queryContainer)
-    })
-
-    queryEvaluation.append(propertySelector, conditionSelector, valueInput)
-
-    return queryEvaluation
-
-}
-
-function createQueryOperator(container) {
-
-    const queryOperator = document.createElement("select")
-    queryOperator.setAttribute("data-queryComponent", "queryOperator")
-    queryOperator.style.height = "40px"
-    cf.fillSelectTag(queryOperator, ["AND","OR"])
-    container.append(queryOperator)
-
-    return queryOperator
-
-}
-
 /**
- * @description This takes a container in which there is a query
-and transforms it into the format required to perform a querySearch.
+ * @description Creates an IFC Selection class with the elements that met the criteria
+ * of the given query string. It returns the new ifc selection.
 */
-function queryString(container) {
+function createQuerySet(name, queryString) {
 
-    let queryString = ""
-
-    const queryStringFunctions = {
-        "queryEvaluation": (domElement) => {
-
-            let localQueryString = ""
-            const queryComponent = domElement.parentElement.getAttribute("data-queryComponent")
-            
-            if (queryComponent == "queryGroup"){
-                localQueryString += "["
-            } else {
-                localQueryString += "(["
-            }
-            
-            Array.from(domElement.children).forEach( (component, i) => {
-                if (i != 1) {
-                    localQueryString += "'" + component.value + "'"
-                } else {
-                    localQueryString += " " + component.value + " "
-                }
-            } )
-            
-            
-            if (queryComponent == "queryGroup"){
-                localQueryString += "]"
-            } else {
-                localQueryString += "])"
-            }
-
-            queryString += localQueryString
-
-        },
-        "queryGroup": (domElement) => {
-
-            queryString += "("
-            const domElementChildren = Array.from(domElement.children)
-            
-            domElementChildren.forEach(child => {
-        
-                if (child.getAttribute("data-queryComponent") != null) {
-                    queryStringFunctions[child.getAttribute("data-queryComponent")](child)
-                }
-            
-            });
-
-            queryString += ")"
-
-        },
-        "queryOperator": (domElement) => {
-
-            queryString += " " + domElement.value + " "
-
-        }
-    }
-
-    queryStringFunctions["queryGroup"](container)
-
-    return queryString.replace(/\(\(+/g, '(').replace(/\)\)+/g, ')')
+    const ids = queryEditor.search(queryString)
+    if (ids == []) { return }
+    const selectMat = new THREE.MeshLambertMaterial({
+        transparent: true,
+        opacity: 0.5,
+        color: "Red",
+        depthTest: true
+    })
+    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, selectMat)
+    querySelection.pickByID(0,ids,true,true)
+    
+    return querySelection
 
 }
 
@@ -489,9 +277,9 @@ addQueryRule.addEventListener("click", () => {
     }
     
     const queryContainerLength = Array.from(queryContainer.children).length
-    if (queryContainerLength != 0) {createQueryOperator(queryContainer)}
-    createQueryEvaluation(queryContainer)
-    queryField.value = queryString(queryContainer)
+    if (queryContainerLength != 0) {queryEditor.createOperator(queryContainer)}
+    queryEditor.createEvaluator()
+    queryField.value = queryEditor.getQueryString()
 
 })
 
@@ -504,26 +292,112 @@ addQueryGroup.addEventListener("click", () => {
     }
 
     const queryContainerLength = Array.from(queryContainer.children).length
-    if (queryContainerLength == 0) {
-        createQueryGroup(queryContainer)
-    } else {
-        createQueryOperator(queryContainer)
-        createQueryGroup(queryContainer)
+    if (queryContainerLength != 0) {queryEditor.createOperator(queryContainer)}
+    queryEditor.createGroup()
+    queryField.value = queryEditor.getQueryString()
+    
+})
+
+//------END QUERY SETS FUNCTIONALITY------
+//------END QUERY SETS FUNCTIONALITY------
+//------END QUERY SETS FUNCTIONALITY------
+
+
+//-----TESTING FUNCTIONALITIES
+//-----TESTING FUNCTIONALITIES
+//-----TESTING FUNCTIONALITIES
+
+//Properties Panel
+const propertiesPanel = document.getElementById("propertiesList")
+
+function renderElementProperties(panel, modelID = 0, expressID) {
+    
+    cf.removeAllChildNodes(panel)
+    const groups = {}
+    const elementProperties = ifcModels[modelID].modelElements[expressID]
+
+    for (let property in elementProperties) {
+
+        const group = elementProperties[property].group
+        const value = elementProperties[property].value
+
+        if (!(group in groups)) {
+
+            const propertyGroup = document.createElement("div")
+            propertyGroup.className = "propertyGroup"
+            propertyGroup.id = group
+            
+            const groupName = document.createElement("h4")
+            groupName.textContent = group
+            propertyGroup.append(groupName)
+
+            panel.append(propertyGroup)
+            groups[group] = propertyGroup
+
+        }
+        
+        const propertyDOMElement = document.createElement("div")
+        propertyDOMElement.className = "elementProperty"
+        propertyDOMElement.textContent = `${property}: ${value}`
+        groups[group].append(propertyDOMElement)
+
     }
-    queryField.value = queryString(queryContainer)
+
+}
+
+//Clash Matrix
+const clashMatrixConfig = {
+    "disciplines": {
+        "Arquitectura": [],
+        "Estructura": [],
+        "Red Mecánica": []
+    },
+    "checkGroups": [[true,false,false],[true,true,false],[true,true,true]]
+}
+
+//4D viewer
+const createScheduleSets = document.getElementById("createScheduleSets")
+const scheduleIds = []
+createScheduleSets.addEventListener("click", () => {
+
+    const scheduleQuerySets = 
+    [
+        "(['Nivel'.'1'] AND ['IfcType'.'BEAM'])",
+        "(['Nivel'.'1'] AND ['IfcType'.'SLAB'])",
+        "(['Nivel'.'1'] AND ['IfcType'.'WALL'])",
+        "(['Nivel'.'2'] AND ['IfcType'.'SLAB'])",
+        "(['Nivel'.'2'] AND ['IfcType'.'WALL'])",
+        "(['Nivel'.'3'] AND ['IfcType'.'SLAB'])",
+        "(['Nivel'.'3'] AND ['IfcType'.'WALL'])",
+        "(['Nivel'.'4'] AND ['IfcType'.'SLAB'])",
+        "(['Nivel'.'4'] AND ['IfcType'.'WALL'])",
+        "(['Nivel'.'5'] AND ['IfcType'.'SLAB'])",
+        "(['Nivel'.'5'] AND ['IfcType'.'WALL'])"
+    ];
+
+    scheduleQuerySets.forEach(queryString => {
+        queryEditor.search(queryString).forEach(element => {
+            scheduleIds.push(element)
+        });
+    });
+
+    console.log("Schedule Sets Created")
 
 })
 
-queryField.value = queryString(queryContainer)
+const myRange = document.getElementById("myRange")
+myRange.addEventListener("input", () => {
+    
+    viewer.IFC.selector.highlightIfcItemsByID(
+        0,
+        scheduleIds.slice(0,scheduleIds.length * myRange.value/100),
+        false,
+        true
+    );
 
-//------END QUERY SETS FUNCTIONALITY------
-//------END QUERY SETS FUNCTIONALITY------
-//------END QUERY SETS FUNCTIONALITY------
+})
 
 
-//-----TESTING FUNCTIONALITIES
-//-----TESTING FUNCTIONALITIES
-//-----TESTING FUNCTIONALITIES
 
 //viewer.clipper.createFromNormalAndCoplanarPoint(new THREE.Vector3(0,-1,0), new THREE.Vector3(0,3,0), false)
 

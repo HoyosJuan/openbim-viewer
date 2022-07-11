@@ -1,6 +1,7 @@
 * {
   padding: 0;
   margin: 0;
+  border: none;
 }
 
 body {
@@ -15,8 +16,8 @@ body {
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-columns: 70px 1fr 400px;
-  grid-template-rows: 50px 1fr;
+  grid-template-columns: 70px 1fr 380px;
+  grid-template-rows: 60px 1fr;
   grid-template-areas: "header header rightBar"
                       "leftBar viewer rightBar";
 }
@@ -31,20 +32,20 @@ body {
 }
 
 .rightBar {
-  background: #1D2733;
   grid-area: rightBar;
   display: flex;
   flex-direction: column;
   padding: 10px;
   row-gap: 10px;
+  box-shadow: -10px 0px 20px -5px rgba(0,0,0,0.2);
+  max-height: 100%;
 }
 
 .header {
-  background: #1D2733;
   grid-area: header;
   display: flex;
   flex-direction: row;
-  padding: 5px;
+  padding: 10px 15px;
   column-gap: 10px;
 }
 
@@ -69,18 +70,12 @@ body {
   height: 40px;
 }
 
-#queryEditor {
+.viewerPanel {
   display: flex;
   flex-direction: column;
   row-gap: 10px;
   height: 100%;
-}
-
-#queryContainer {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  row-gap: 10px;
+  overflow-y: auto;
 }
 
 select {
@@ -92,4 +87,71 @@ select {
 h1, h2 {
   text-align: center;
   color: rgb(240, 240, 240);
+}
+
+button, select, input {
+  /*background-color: transparent;
+  color: rgb(240, 240, 240);*/
+  border: none;
+  border-radius: 4px;
+  height: 40px;
+  width: 100%;
+  text-align: center;
+}
+
+button {
+  background-color: rgb(255, 255, 255);
+}
+button:hover {
+  background-color: rgb(230, 230, 230);
+}
+
+table {
+  color: white;
+  text-align: center;
+  width: fit-content;
+  height: auto;
+  font-size: 14px;
+  border-spacing: 0;
+}
+
+tr, th, td {
+  height: 45px;
+  width: 45px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: white;
+}
+
+tr th {
+  text-orientation: upright;
+  writing-mode: vertical-rl;
+  height: auto;
+}
+
+td:hover {
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
+.propertyGroup {
+  color: white;
+  display: flex;
+  flex-direction: column;
+  row-gap: 10px;
+  border-style: dashed;
+  border-width: 2px;
+  border-color: rgb(75, 75, 75);
+  border-radius: 4px;
+  padding: 0px 0px 10px 0px;
+}
+
+.propertyGroup h4 {
+  background-color: #131d29;
+  padding: 15px;
+}
+
+.elementProperty {
+  display: flex;
+  flex-direction: row;
+  padding: 5px 20px;
 }
