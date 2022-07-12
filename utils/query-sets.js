@@ -15,64 +15,72 @@ export default class QueryEditor {
     */
     search(queryString = this.getQueryString()){
 
-        if (queryString == "") {return} 
+        if (queryString == "") {return}
         const model = this.viewer.context.items.ifcModels[0]
         let result = []
 
-        const brokenQuery = queryString.split(/\(([^)]+)\)/) //Splits everything between parenthesis
-        const queryGroups = []
-        const queryOperators = ["OR"]
+        try {
+            
+            const brokenQuery = queryString.split(/\(([^)]+)\)/) //Splits everything between parenthesis
+            const queryGroups = []
+            const queryOperators = ["OR"]
 
-        for (let i=0; i<brokenQuery.length; i++) {
-        if (brokenQuery[i] != "") {
-            if (i % 2 == 0) {
-                queryOperators.push(brokenQuery[i].replace(/\s+/g, ''))
-            } else {
-                queryGroups.push(brokenQuery[i])
-            }
-        }
-        }
-
-        queryGroups.forEach( (queryGroup, i) => {
-
-        let groupResult = []
-
-        const brokenGroup = queryGroup.split(/\[([^\]]+)\]/) //Splits everything between square brackets
-        const groupSearches = []
-        const groupOperators = ["OR"]
-
-        for (let i=0; i<brokenGroup.length; i++) {
-            if (brokenGroup[i] != "") {
+            for (let i=0; i<brokenQuery.length; i++) {
+            if (brokenQuery[i] != "") {
                 if (i % 2 == 0) {
-                    groupOperators.push(brokenGroup[i].replace(/\s+/g, ''))
+                    queryOperators.push(brokenQuery[i].replace(/\s+/g, ''))
                 } else {
-                    groupSearches.push(brokenGroup[i])
+                    queryGroups.push(brokenQuery[i])
                 }
             }
+            }
+
+            queryGroups.forEach( (queryGroup, i) => {
+
+            let groupResult = []
+
+            const brokenGroup = queryGroup.split(/\[([^\]]+)\]/) //Splits everything between square brackets
+            const groupSearches = []
+            const groupOperators = ["OR"]
+
+            for (let i=0; i<brokenGroup.length; i++) {
+                if (brokenGroup[i] != "") {
+                    if (i % 2 == 0) {
+                        groupOperators.push(brokenGroup[i].replace(/\s+/g, ''))
+                    } else {
+                        groupSearches.push(brokenGroup[i])
+                    }
+                }
+            }
+
+            groupSearches.forEach( (search, i) => {
+                
+                const brokenSearch = search.split(/\'([^']+)\'/g)
+                const property = brokenSearch[1]
+                const operator = brokenSearch[2].replace(/\s+/g, '')
+                const value = brokenSearch[3]
+                const queryValues = model.modelData[property].values
+
+                let localSearchResult = []
+                for (const currentValue in queryValues) {
+                    if (evalProperty(currentValue, operator, value) == true) {
+                        localSearchResult = cf.arrayOperator(localSearchResult, queryValues[currentValue])["OR"]
+                    }
+                }
+
+                groupResult = cf.arrayOperator(groupResult, localSearchResult)[groupOperators[i]]
+                
+            })
+
+            result = cf.arrayOperator(result, groupResult)[queryOperators[i]]
+
+            })
+
+        } catch(error) {
+
+            result = []
+
         }
-
-        groupSearches.forEach( (search, i) => {
-            
-            const brokenSearch = search.split(/\'([^']+)\'/g)
-            const property = brokenSearch[1]
-            const operator = brokenSearch[2].replace(/\s+/g, '')
-            const value = brokenSearch[3]
-            const queryValues = model.modelData[property].values
-
-            let localSearchResult = []
-            for (const currentValue in queryValues) {
-                if (evalProperty(currentValue, operator, value) == true) {
-                    localSearchResult = cf.arrayOperator(localSearchResult, queryValues[currentValue])["OR"]
-                }
-            }
-
-            groupResult = cf.arrayOperator(groupResult, localSearchResult)[groupOperators[i]]
-            
-        })
-
-        result = cf.arrayOperator(result, groupResult)[queryOperators[i]]
-
-        })
 
         return result
     }
@@ -97,7 +105,9 @@ export default class QueryEditor {
                     localQueryString += "(["
                 }
                 
-                Array.from(domElement.children).forEach( (component, i) => {
+                const evaluationChildren = Array.from(domElement.children)
+
+                evaluationChildren.slice(1, evaluationChildren.length).forEach( (component, i) => {
                     if (i != 1) {
                         localQueryString += "'" + component.value + "'"
                     } else {
@@ -186,14 +196,23 @@ export default class QueryEditor {
         queryEvaluation.className = "queryEvaluation"
         queryEvaluation.setAttribute("data-queryComponent", "queryEvaluation")
         container.append(queryEvaluation)
+
+        const dataList = document.createElement("datalist")
+        dataList.setAttribute("data-queryComponent", "queryPossibleValues")
+        const dataListId = Math.random().toString(36).slice(2)
+        dataList.id = dataListId
     
         const propertySelector = document.createElement("select")
         cf.fillSelectTag(propertySelector, Object.keys(model.modelData))
-        //const propertySelector = document.createElement("input")
         propertySelector.style.width = "100%"
         propertySelector.setAttribute("data-queryComponent", "queryProperty")
-        propertySelector.addEventListener("keyup", () => {
-            queryField.value = queryEditor.getQueryString()
+        propertySelector.addEventListener("change", () => {
+            queryField.value = this.getQueryString()
+            cf.removeAllChildNodes(dataList)
+            cf.fillSelectTag(
+                dataList, 
+                Object.keys(model.modelData[propertySelector.value].values)
+            );
         })
     
         const conditionSelector = document.createElement("select")
@@ -201,17 +220,18 @@ export default class QueryEditor {
         conditionSelector.setAttribute("data-queryComponent", "queryCondition")
         cf.fillSelectTag(conditionSelector, ["=", "!=", "sw", ">", ">=", "<", "<=", "."])
         conditionSelector.addEventListener("change", () => {
-            queryField.value = queryEditor.getQueryString()
+            queryField.value = this.getQueryString()
         })
     
         const valueInput = document.createElement("input")
         valueInput.style.width = "100%"
         valueInput.setAttribute("data-queryComponent", "queryValue")
+        valueInput.setAttribute("list", dataListId)
         valueInput.addEventListener("keyup", () => {
-            queryField.value = queryEditor.getQueryString()
+            queryField.value = this.getQueryString()
         })
     
-        queryEvaluation.append(propertySelector, conditionSelector, valueInput)
+        queryEvaluation.append(dataList, propertySelector, conditionSelector, valueInput)
     
         return queryEvaluation
 

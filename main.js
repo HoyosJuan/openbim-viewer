@@ -4,16 +4,13 @@ import { IfcSelection } from 'web-ifc-viewer/dist/components'
 import * as cf from './utils/custom-functions'
 import QueryEditor from "./utils/query-sets"
 
-
-
 const container = document.getElementById('viewer-container')
 const viewer = window.viewer = new IfcViewerAPI({ 
     "container": container,
     "backgroundColor": new THREE.Color("lightgray")
 })
 const ifc = viewer.IFC.loader.ifcManager
-//viewer.axes.setAxes()
-//viewer.grid.setGrid(200,300)
+//await ifc.useWebWorkers(false, "IFCWorker.js")
 
 const queryContainer = document.getElementById("queryContainer")
 const queryEditor = new QueryEditor(queryContainer, viewer)
@@ -26,7 +23,6 @@ viewer.IFC.selector.defSelectMat.opacity = 0.25
 const ifcModels = viewer.context.items.ifcModels
 const scene = viewer.context.getScene()
 const renderer = viewer.context.getRenderer()
-renderer.setClearAlpha(1)
 const raycaster = viewer.context.items.components[6].raycaster
 const camera = viewer.context.getCamera()
 const pointer = new THREE.Vector2()
@@ -37,18 +33,6 @@ const mat = new THREE.MeshLambertMaterial({
     depthTest: false
 })
 
-const postProduction = viewer.context.renderer.postProduction
-/*postProduction.tryToInitialize()
-postProduction.addAntialiasPass()
-postProduction.active = true
-console.log(postProduction)*/
-
-//Customize the viewer look
-/*const grid = viewer.grid.grid
-grid.material.color = {r: 0.8, g: 0.8, b: 0.8}
-grid.material.transparent = true
-grid.material.opacity = 0.15*/
-
 function loadIFC(url, parseData = false) {
 
     viewer.IFC.loader.load( url, (model) => {
@@ -58,7 +42,6 @@ function loadIFC(url, parseData = false) {
         model.modelData = {}
         model.modelElements = {}
         if (parseData) {getModelProperties(model.modelID)}
-        //fillSelectTag(propertiesList, Object.keys(model.modelData))
         
         //Add edges to the model
         const edgeMaterial = new THREE.LineBasicMaterial( { color: "Black"} )
@@ -75,9 +58,10 @@ function loadIFC(url, parseData = false) {
 
 }
 
-//loadIFC("/IFC Files/SIMPLE-IFC.ifc")
 loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc")
-//loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
+loadIFC("/IFC Files/SRR-CGC-T02-ZZZ-M3D-EST-001.ifc")
+//loadIFC("/IFC Files/SIMPLE-IFC.ifc")
+//loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc")
 
 function onMouseMove (e) {
 
@@ -92,7 +76,8 @@ function onMouseMove (e) {
         return
 
     }
-
+    
+    const modelID = intersect.object.modelID
     const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
     viewer.IFC.selector.pickIfcItemsByID(0,[expressID])
 
@@ -120,7 +105,10 @@ function onMouseClick (e) {
 renderer.domElement.addEventListener("mousemove", onMouseMove)
 renderer.domElement.addEventListener("mouseup", onMouseClick)
 
-async function getModelProperties(modelID = 0) {
+async function getModelProperties(modelID = 0, callback) {
+    
+    //Returns the function if no model is loaded.
+    if (ifcModels.length == 0) { return }
     
     /*
     These are the two main variables that keep all the extracted data; 
@@ -191,18 +179,15 @@ async function getModelProperties(modelID = 0) {
         });
     })
 
-    //Process all element data regarding its property sets and quantity sets
+    let processCount = 0
+
+    //Process all element data
     await cf.asyncForEach(ids, async expressID => {
 
         const psets = await ifc.getPropertySets(modelID, expressID, true)
         psets.forEach(pset => {
             dataExtraction[pset.constructor.name](expressID, pset)
         });
-
-    })
-
-    //Process basic element data such as its name, type, global id, etc...
-    await cf.asyncForEach(ids, async expressID => {
 
         const dataToExtract = 
         ["GlobalId", "Name", "ObjectType", 
@@ -217,6 +202,9 @@ async function getModelProperties(modelID = 0) {
         const ifcType = ifc.getIfcType(modelID, expressID)
         storeProperty(expressID, "IfcType", ifcType, "General")
 
+        processCount += 1
+        callback(processCount/ids.length)
+
     })
 
     return modelData
@@ -224,7 +212,8 @@ async function getModelProperties(modelID = 0) {
 
 const parseDataButton = document.getElementById("parseData")
 parseDataButton.addEventListener("click", async () => {
-    await getModelProperties(0)
+    await getModelProperties(0, (processing) => {})
+    //await getModelProperties(1)
     console.log("Properties parsed!")
 })
 
@@ -235,15 +224,9 @@ parseDataButton.addEventListener("click", async () => {
 const testQuery = document.getElementById("testQuery")
 const queryField = document.getElementById("queryField")
 
-/*propertiesSelector.addEventListener("change", (e) => {
-    removeAllChildNodes(searchFieldList)
-    searchField.value = ""
-    const possibleOptions = ifcModels[0].modelData[propertiesSelector.value].values
-})*/
-
 testQuery.addEventListener("click", (e) => {
 
-    createQuerySet("Custom Query", queryEditor.getQueryString())
+    createQuerySet("Custom Query", queryEditor.getQueryString())    
 
 })
 
@@ -254,14 +237,8 @@ testQuery.addEventListener("click", (e) => {
 function createQuerySet(name, queryString) {
 
     const ids = queryEditor.search(queryString)
-    if (ids == []) { return }
-    const selectMat = new THREE.MeshLambertMaterial({
-        transparent: true,
-        opacity: 0.5,
-        color: "Red",
-        depthTest: true
-    })
-    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, selectMat)
+    if (ids.length == 0) { return }
+    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat)
     querySelection.pickByID(0,ids,true,true)
     
     return querySelection
@@ -277,7 +254,7 @@ addQueryRule.addEventListener("click", () => {
     }
     
     const queryContainerLength = Array.from(queryContainer.children).length
-    if (queryContainerLength != 0) {queryEditor.createOperator(queryContainer)}
+    if (queryContainerLength != 0) {queryEditor.createOperator()}
     queryEditor.createEvaluator()
     queryField.value = queryEditor.getQueryString()
 
@@ -292,7 +269,7 @@ addQueryGroup.addEventListener("click", () => {
     }
 
     const queryContainerLength = Array.from(queryContainer.children).length
-    if (queryContainerLength != 0) {queryEditor.createOperator(queryContainer)}
+    if (queryContainerLength != 0) {queryEditor.createOperator()}
     queryEditor.createGroup()
     queryField.value = queryEditor.getQueryString()
     
@@ -357,6 +334,7 @@ const clashMatrixConfig = {
 
 //4D viewer
 const createScheduleSets = document.getElementById("createScheduleSets")
+const myRange = document.getElementById("myRange")
 const scheduleIds = []
 createScheduleSets.addEventListener("click", () => {
 
@@ -382,10 +360,9 @@ createScheduleSets.addEventListener("click", () => {
     });
 
     console.log("Schedule Sets Created")
-
+    
 })
 
-const myRange = document.getElementById("myRange")
 myRange.addEventListener("input", () => {
     
     viewer.IFC.selector.highlightIfcItemsByID(
@@ -396,8 +373,6 @@ myRange.addEventListener("input", () => {
     );
 
 })
-
-
 
 //viewer.clipper.createFromNormalAndCoplanarPoint(new THREE.Vector3(0,-1,0), new THREE.Vector3(0,3,0), false)
 

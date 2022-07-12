@@ -121400,64 +121400,72 @@ class QueryEditor {
     */
     search(queryString = this.getQueryString()){
 
-        if (queryString == "") {return} 
+        if (queryString == "") {return}
         const model = this.viewer.context.items.ifcModels[0];
         let result = [];
 
-        const brokenQuery = queryString.split(/\(([^)]+)\)/); //Splits everything between parenthesis
-        const queryGroups = [];
-        const queryOperators = ["OR"];
+        try {
+            
+            const brokenQuery = queryString.split(/\(([^)]+)\)/); //Splits everything between parenthesis
+            const queryGroups = [];
+            const queryOperators = ["OR"];
 
-        for (let i=0; i<brokenQuery.length; i++) {
-        if (brokenQuery[i] != "") {
-            if (i % 2 == 0) {
-                queryOperators.push(brokenQuery[i].replace(/\s+/g, ''));
-            } else {
-                queryGroups.push(brokenQuery[i]);
-            }
-        }
-        }
-
-        queryGroups.forEach( (queryGroup, i) => {
-
-        let groupResult = [];
-
-        const brokenGroup = queryGroup.split(/\[([^\]]+)\]/); //Splits everything between square brackets
-        const groupSearches = [];
-        const groupOperators = ["OR"];
-
-        for (let i=0; i<brokenGroup.length; i++) {
-            if (brokenGroup[i] != "") {
+            for (let i=0; i<brokenQuery.length; i++) {
+            if (brokenQuery[i] != "") {
                 if (i % 2 == 0) {
-                    groupOperators.push(brokenGroup[i].replace(/\s+/g, ''));
+                    queryOperators.push(brokenQuery[i].replace(/\s+/g, ''));
                 } else {
-                    groupSearches.push(brokenGroup[i]);
+                    queryGroups.push(brokenQuery[i]);
                 }
             }
+            }
+
+            queryGroups.forEach( (queryGroup, i) => {
+
+            let groupResult = [];
+
+            const brokenGroup = queryGroup.split(/\[([^\]]+)\]/); //Splits everything between square brackets
+            const groupSearches = [];
+            const groupOperators = ["OR"];
+
+            for (let i=0; i<brokenGroup.length; i++) {
+                if (brokenGroup[i] != "") {
+                    if (i % 2 == 0) {
+                        groupOperators.push(brokenGroup[i].replace(/\s+/g, ''));
+                    } else {
+                        groupSearches.push(brokenGroup[i]);
+                    }
+                }
+            }
+
+            groupSearches.forEach( (search, i) => {
+                
+                const brokenSearch = search.split(/\'([^']+)\'/g);
+                const property = brokenSearch[1];
+                const operator = brokenSearch[2].replace(/\s+/g, '');
+                const value = brokenSearch[3];
+                const queryValues = model.modelData[property].values;
+
+                let localSearchResult = [];
+                for (const currentValue in queryValues) {
+                    if (evalProperty(currentValue, operator, value) == true) {
+                        localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue])["OR"];
+                    }
+                }
+
+                groupResult = arrayOperator(groupResult, localSearchResult)[groupOperators[i]];
+                
+            });
+
+            result = arrayOperator(result, groupResult)[queryOperators[i]];
+
+            });
+
+        } catch(error) {
+
+            result = [];
+
         }
-
-        groupSearches.forEach( (search, i) => {
-            
-            const brokenSearch = search.split(/\'([^']+)\'/g);
-            const property = brokenSearch[1];
-            const operator = brokenSearch[2].replace(/\s+/g, '');
-            const value = brokenSearch[3];
-            const queryValues = model.modelData[property].values;
-
-            let localSearchResult = [];
-            for (const currentValue in queryValues) {
-                if (evalProperty(currentValue, operator, value) == true) {
-                    localSearchResult = arrayOperator(localSearchResult, queryValues[currentValue])["OR"];
-                }
-            }
-
-            groupResult = arrayOperator(groupResult, localSearchResult)[groupOperators[i]];
-            
-        });
-
-        result = arrayOperator(result, groupResult)[queryOperators[i]];
-
-        });
 
         return result
     }
@@ -121482,7 +121490,9 @@ class QueryEditor {
                     localQueryString += "([";
                 }
                 
-                Array.from(domElement.children).forEach( (component, i) => {
+                const evaluationChildren = Array.from(domElement.children);
+
+                evaluationChildren.slice(1, evaluationChildren.length).forEach( (component, i) => {
                     if (i != 1) {
                         localQueryString += "'" + component.value + "'";
                     } else {
@@ -121571,14 +121581,23 @@ class QueryEditor {
         queryEvaluation.className = "queryEvaluation";
         queryEvaluation.setAttribute("data-queryComponent", "queryEvaluation");
         container.append(queryEvaluation);
+
+        const dataList = document.createElement("datalist");
+        dataList.setAttribute("data-queryComponent", "queryPossibleValues");
+        const dataListId = Math.random().toString(36).slice(2);
+        dataList.id = dataListId;
     
         const propertySelector = document.createElement("select");
         fillSelectTag(propertySelector, Object.keys(model.modelData));
-        //const propertySelector = document.createElement("input")
         propertySelector.style.width = "100%";
         propertySelector.setAttribute("data-queryComponent", "queryProperty");
-        propertySelector.addEventListener("keyup", () => {
-            queryField.value = queryEditor.getQueryString();
+        propertySelector.addEventListener("change", () => {
+            queryField.value = this.getQueryString();
+            removeAllChildNodes(dataList);
+            fillSelectTag(
+                dataList, 
+                Object.keys(model.modelData[propertySelector.value].values)
+            );
         });
     
         const conditionSelector = document.createElement("select");
@@ -121586,17 +121605,18 @@ class QueryEditor {
         conditionSelector.setAttribute("data-queryComponent", "queryCondition");
         fillSelectTag(conditionSelector, ["=", "!=", "sw", ">", ">=", "<", "<=", "."]);
         conditionSelector.addEventListener("change", () => {
-            queryField.value = queryEditor.getQueryString();
+            queryField.value = this.getQueryString();
         });
     
         const valueInput = document.createElement("input");
         valueInput.style.width = "100%";
         valueInput.setAttribute("data-queryComponent", "queryValue");
+        valueInput.setAttribute("list", dataListId);
         valueInput.addEventListener("keyup", () => {
-            queryField.value = queryEditor.getQueryString();
+            queryField.value = this.getQueryString();
         });
     
-        queryEvaluation.append(propertySelector, conditionSelector, valueInput);
+        queryEvaluation.append(dataList, propertySelector, conditionSelector, valueInput);
     
         return queryEvaluation
 
@@ -121664,11 +121684,10 @@ const viewer = window.viewer = new IfcViewerAPI({
     "backgroundColor": new Color("lightgray")
 });
 const ifc = viewer.IFC.loader.ifcManager;
-//viewer.axes.setAxes()
-//viewer.grid.setGrid(200,300)
+//await ifc.useWebWorkers(false, "IFCWorker.js")
 
 const queryContainer = document.getElementById("queryContainer");
-const queryEditor$1 = new QueryEditor(queryContainer, viewer);
+const queryEditor = new QueryEditor(queryContainer, viewer);
 
 //Modify some of the web-ifc-viewer defaults
 viewer.IFC.selector.defSelectMat.color = new Color("gold");
@@ -121678,28 +121697,15 @@ viewer.IFC.selector.defSelectMat.opacity = 0.25;
 const ifcModels = viewer.context.items.ifcModels;
 const scene = viewer.context.getScene();
 const renderer = viewer.context.getRenderer();
-renderer.setClearAlpha(1);
 const raycaster = viewer.context.items.components[6].raycaster;
 const camera = viewer.context.getCamera();
 const pointer = new Vector2();
-new MeshLambertMaterial({
+const mat = new MeshLambertMaterial({
     transparent: true,
     opacity: 0.6,
     color: "CornflowerBlue",
     depthTest: false
 });
-
-viewer.context.renderer.postProduction;
-/*postProduction.tryToInitialize()
-postProduction.addAntialiasPass()
-postProduction.active = true
-console.log(postProduction)*/
-
-//Customize the viewer look
-/*const grid = viewer.grid.grid
-grid.material.color = {r: 0.8, g: 0.8, b: 0.8}
-grid.material.transparent = true
-grid.material.opacity = 0.15*/
 
 function loadIFC(url, parseData = false) {
 
@@ -121710,7 +121716,6 @@ function loadIFC(url, parseData = false) {
         model.modelData = {};
         model.modelElements = {};
         if (parseData) {getModelProperties(model.modelID);}
-        //fillSelectTag(propertiesList, Object.keys(model.modelData))
         
         //Add edges to the model
         const edgeMaterial = new LineBasicMaterial( { color: "Black"} );
@@ -121727,9 +121732,10 @@ function loadIFC(url, parseData = false) {
 
 }
 
-//loadIFC("/IFC Files/SIMPLE-IFC.ifc")
 loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc");
-//loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
+loadIFC("/IFC Files/SRR-CGC-T02-ZZZ-M3D-EST-001.ifc");
+//loadIFC("/IFC Files/SIMPLE-IFC.ifc")
+//loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc")
 
 function onMouseMove (e) {
 
@@ -121744,7 +121750,8 @@ function onMouseMove (e) {
         return
 
     }
-
+    
+    intersect.object.modelID;
     const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex);
     viewer.IFC.selector.pickIfcItemsByID(0,[expressID]);
 
@@ -121772,7 +121779,10 @@ function onMouseClick (e) {
 renderer.domElement.addEventListener("mousemove", onMouseMove);
 renderer.domElement.addEventListener("mouseup", onMouseClick);
 
-async function getModelProperties(modelID = 0) {
+async function getModelProperties(modelID = 0, callback) {
+    
+    //Returns the function if no model is loaded.
+    if (ifcModels.length == 0) { return }
     
     /*
     These are the two main variables that keep all the extracted data; 
@@ -121843,18 +121853,15 @@ async function getModelProperties(modelID = 0) {
         });
     });
 
-    //Process all element data regarding its property sets and quantity sets
+    let processCount = 0;
+
+    //Process all element data
     await asyncForEach(ids, async expressID => {
 
         const psets = await ifc.getPropertySets(modelID, expressID, true);
         psets.forEach(pset => {
             dataExtraction[pset.constructor.name](expressID, pset);
         });
-
-    });
-
-    //Process basic element data such as its name, type, global id, etc...
-    await asyncForEach(ids, async expressID => {
 
         const dataToExtract = 
         ["GlobalId", "Name", "ObjectType", 
@@ -121869,6 +121876,9 @@ async function getModelProperties(modelID = 0) {
         const ifcType = ifc.getIfcType(modelID, expressID);
         storeProperty(expressID, "IfcType", ifcType, "General");
 
+        processCount += 1;
+        callback(processCount/ids.length);
+
     });
 
     return modelData
@@ -121876,7 +121886,8 @@ async function getModelProperties(modelID = 0) {
 
 const parseDataButton = document.getElementById("parseData");
 parseDataButton.addEventListener("click", async () => {
-    await getModelProperties(0);
+    await getModelProperties(0, (processing) => {});
+    //await getModelProperties(1)
     console.log("Properties parsed!");
 });
 
@@ -121887,15 +121898,9 @@ parseDataButton.addEventListener("click", async () => {
 const testQuery = document.getElementById("testQuery");
 const queryField$1 = document.getElementById("queryField");
 
-/*propertiesSelector.addEventListener("change", (e) => {
-    removeAllChildNodes(searchFieldList)
-    searchField.value = ""
-    const possibleOptions = ifcModels[0].modelData[propertiesSelector.value].values
-})*/
-
 testQuery.addEventListener("click", (e) => {
 
-    createQuerySet("Custom Query", queryEditor$1.getQueryString());
+    createQuerySet("Custom Query", queryEditor.getQueryString());    
 
 });
 
@@ -121905,15 +121910,9 @@ testQuery.addEventListener("click", (e) => {
 */
 function createQuerySet(name, queryString) {
 
-    const ids = queryEditor$1.search(queryString);
-    if (ids == []) { return }
-    const selectMat = new MeshLambertMaterial({
-        transparent: true,
-        opacity: 0.5,
-        color: "Red",
-        depthTest: true
-    });
-    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, selectMat);
+    const ids = queryEditor.search(queryString);
+    if (ids.length == 0) { return }
+    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat);
     querySelection.pickByID(0,ids,true,true);
     
     return querySelection
@@ -121929,9 +121928,9 @@ addQueryRule.addEventListener("click", () => {
     }
     
     const queryContainerLength = Array.from(queryContainer.children).length;
-    if (queryContainerLength != 0) {queryEditor$1.createOperator(queryContainer);}
-    queryEditor$1.createEvaluator();
-    queryField$1.value = queryEditor$1.getQueryString();
+    if (queryContainerLength != 0) {queryEditor.createOperator();}
+    queryEditor.createEvaluator();
+    queryField$1.value = queryEditor.getQueryString();
 
 });
 
@@ -121944,9 +121943,9 @@ addQueryGroup.addEventListener("click", () => {
     }
 
     const queryContainerLength = Array.from(queryContainer.children).length;
-    if (queryContainerLength != 0) {queryEditor$1.createOperator(queryContainer);}
-    queryEditor$1.createGroup();
-    queryField$1.value = queryEditor$1.getQueryString();
+    if (queryContainerLength != 0) {queryEditor.createOperator();}
+    queryEditor.createGroup();
+    queryField$1.value = queryEditor.getQueryString();
     
 });
 
@@ -121999,6 +121998,7 @@ function renderElementProperties(panel, modelID = 0, expressID) {
 
 //4D viewer
 const createScheduleSets = document.getElementById("createScheduleSets");
+const myRange = document.getElementById("myRange");
 const scheduleIds = [];
 createScheduleSets.addEventListener("click", () => {
 
@@ -122018,16 +122018,15 @@ createScheduleSets.addEventListener("click", () => {
     ];
 
     scheduleQuerySets.forEach(queryString => {
-        queryEditor$1.search(queryString).forEach(element => {
+        queryEditor.search(queryString).forEach(element => {
             scheduleIds.push(element);
         });
     });
 
     console.log("Schedule Sets Created");
-
+    
 });
 
-const myRange = document.getElementById("myRange");
 myRange.addEventListener("input", () => {
     
     viewer.IFC.selector.highlightIfcItemsByID(
@@ -122038,8 +122037,6 @@ myRange.addEventListener("input", () => {
     );
 
 });
-
-
 
 //viewer.clipper.createFromNormalAndCoplanarPoint(new THREE.Vector3(0,-1,0), new THREE.Vector3(0,3,0), false)
 
