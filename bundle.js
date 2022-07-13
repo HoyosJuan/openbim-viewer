@@ -106339,7 +106339,7 @@ class IfcRenderer extends IfcComponent {
         this.blocked = false;
         this.context = context;
         this.container = context.options.container;
-        this.renderer = new WebGLRenderer();
+        this.renderer = new WebGLRenderer({ antialias: true , alpha: true});
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.setupRenderers();
         this.postProduction = new Postproduction(this.context, this.renderer);
@@ -106444,7 +106444,7 @@ class IfcScene extends IfcComponent {
             model.removeFromParent();
     }
     setupScene(options) {
-        this.scene.background = (options === null || options === void 0 ? void 0 : options.backgroundColor) || this.defaultBackgroundColor;
+        //this.scene.background = (options === null || options === void 0 ? void 0 : options.backgroundColor) || this.defaultBackgroundColor;
     }
     setupLights() {
         const light1 = new DirectionalLight(0xffeeff, 0.8);
@@ -121679,12 +121679,11 @@ function evalProperty(propertyValue, operator, value){
 }
 
 const container = document.getElementById('viewer-container');
-const viewer = window.viewer = new IfcViewerAPI({ 
-    "container": container,
-    "backgroundColor": new Color("lightgray")
-});
+const viewer = window.viewer = new IfcViewerAPI({ "container": container });
+viewer.IFC.applyWebIfcConfig({ COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true });
 const ifc = viewer.IFC.loader.ifcManager;
-//await ifc.useWebWorkers(false, "IFCWorker.js")
+viewer.clipper.active = true;
+//await ifc.useWebWorkers(true, "IFCWorker.js")
 
 const queryContainer = document.getElementById("queryContainer");
 const queryEditor = new QueryEditor(queryContainer, viewer);
@@ -121697,25 +121696,27 @@ viewer.IFC.selector.defSelectMat.opacity = 0.25;
 const ifcModels = viewer.context.items.ifcModels;
 const scene = viewer.context.getScene();
 const renderer = viewer.context.getRenderer();
-const raycaster = viewer.context.items.components[6].raycaster;
+const raycaster = viewer.context.ifcCaster.raycaster;
+raycaster.firstHitOnly = true;
 const camera = viewer.context.getCamera();
-const pointer = new Vector2();
+const pointer = viewer.context.mouse.position;
 const mat = new MeshLambertMaterial({
     transparent: true,
-    opacity: 0.6,
-    color: "CornflowerBlue",
-    depthTest: false
+    opacity: 0.8,
+    color: "MediumAquaMarine",
+    //color: cssColors[Math.floor(Math.random()*cssColors.length)],
+    depthTest: true
 });
 
-function loadIFC(url, parseData = false) {
+async function loadIFC(url, getData = false) {
 
     viewer.IFC.loader.load( url, (model) => {
 
-        scene.add(model);
         ifcModels.push(model);
+        scene.add(model);
         model.modelData = {};
         model.modelElements = {};
-        if (parseData) {getModelProperties(model.modelID);}
+        if (getData) {getModelProperties(model.modelID);}
         
         //Add edges to the model
         const edgeMaterial = new LineBasicMaterial( { color: "Black"} );
@@ -121728,22 +121729,26 @@ function loadIFC(url, parseData = false) {
         
         viewer.context.fitToFrame();
 
+        console.log("Model loaded!");
+
     });
 
 }
 
-loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc");
-loadIFC("/IFC Files/SRR-CGC-T02-ZZZ-M3D-EST-001.ifc");
+//await loadIFC("/IFC Files/HNSAI_BPY_M3_ARQ_HABITACIONES.ifc")
+//await loadIFC("/IFC Files/NAV-FLUX-ET1-E01-ZZZ-M3D-INH.ifc")
+//await loadIFC("/IFC Files/NAV-BSKA-ETG_URB-ZZZ-M3D-ARQ.ifc")
+//await loadIFC("/IFC Files/HNSAI_BPY_M3_HVAC.ifc", true)
+await loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc", true);
+//await loadIFC("/IFC Files/SRR-CGC-T02-ZZZ-M3D-EST-001.ifc")
 //loadIFC("/IFC Files/SIMPLE-IFC.ifc")
 //loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc")
 
 function onMouseMove (e) {
 
-    pointer.x = ( (e.x - e.target.offsetLeft) / e.target.clientWidth ) * 2 - 1;
-    pointer.y = - ( (e.y - e.target.offsetTop) / e.target.clientHeight ) * 2 + 1;
     raycaster.setFromCamera( pointer, camera );
     const intersect = raycaster.intersectObjects( ifcModels, false )[0];
-
+    
     if ( intersect == null ) {
 
         viewer.IFC.selector.unpickIfcItems();
@@ -121779,7 +121784,7 @@ function onMouseClick (e) {
 renderer.domElement.addEventListener("mousemove", onMouseMove);
 renderer.domElement.addEventListener("mouseup", onMouseClick);
 
-async function getModelProperties(modelID = 0, callback) {
+async function getModelProperties(modelID = 0, callback = () => {}, getPsets = false) {
     
     //Returns the function if no model is loaded.
     if (ifcModels.length == 0) { return }
@@ -121793,29 +121798,31 @@ async function getModelProperties(modelID = 0, callback) {
     const modelData = ifcModels[modelID].modelData = {};
     
     //Main function to store a property 
-    function storeProperty(elementExpressID, name, value, group) {
+    function storeProperty(expressID, name, value, group) {
+
+        if (value == "") {value = "---";}
 
         //Logic for storing data inside modelData object
         if (name in modelData) {
-            modelData[name].elements.push(elementExpressID);
+            modelData[name].elements.push(expressID);
             if (value in modelData[name].values) {
-                modelData[name].values[value].push(elementExpressID);
+                modelData[name].values[value].push(expressID);
             } else {
-                modelData[name].values[value] = [elementExpressID];
+                modelData[name].values[value] = [expressID];
             }
         } else {
             modelData[name] = { "elements": [], "values": {} };
-            modelData[name].elements.push(elementExpressID);
-            modelData[name].values[value] = [elementExpressID];
+            modelData[name].elements.push(expressID);
+            modelData[name].values[value] = [expressID];
         }
 
         //Logic for storing data inside modelElements object
-        if (!(elementExpressID in modelElements)) {
-            modelElements[elementExpressID] = {};
+        if (!(expressID in modelElements)) {
+            modelElements[expressID] = {};
         }
-        modelElements[elementExpressID][name] = {};
-        modelElements[elementExpressID][name].value = value;
-        modelElements[elementExpressID][name].group = group;
+        modelElements[expressID][name] = {};
+        modelElements[expressID][name].value = value;
+        modelElements[expressID][name].group = group;
 
     }
 
@@ -121846,35 +121853,48 @@ async function getModelProperties(modelID = 0, callback) {
     const spatialStructure = await viewer.IFC.getSpatialStructure(modelID);
     const buildingStoreys = spatialStructure.children[0].children[0].children;
     const ids = [];
-    buildingStoreys.forEach(storey => {
+
+    await asyncForEach(buildingStoreys, async storey => {
+        const storeyData = await ifc.getItemProperties(modelID, storey.expressID);
+        const storeyName = storeyData.Name.value;
         storey.children.forEach(element => {
             modelElements[element.expressID] = {};
+            storeProperty(element.expressID, "Storey Name", storeyName, "Instance Properties");
             ids.push(element.expressID);
         });
     });
-
+    
     let processCount = 0;
 
     //Process all element data
     await asyncForEach(ids, async expressID => {
 
-        const psets = await ifc.getPropertySets(modelID, expressID, true);
-        psets.forEach(pset => {
-            dataExtraction[pset.constructor.name](expressID, pset);
-        });
+        if (getPsets) {
+
+            const psets = await ifc.getPropertySets(modelID, expressID, true);
+            psets.forEach(pset => {
+                dataExtraction[pset.constructor.name](expressID, pset);
+            });
+
+        }
 
         const dataToExtract = 
-        ["GlobalId", "Name", "ObjectType", 
-        "PredefinedType", "Tag"];
+        ["Name", "ObjectType", 
+        "PredefinedType", "Tag", "GlobalId"];
 
         const basicData = await ifc.getItemProperties(modelID, expressID, false);
         dataToExtract.forEach(data => {
             if (basicData[data] == null) {return}
-            storeProperty(expressID, data, basicData[data].value, "General");
+            storeProperty(expressID, data, basicData[data].value, "Instance Properties");
         });
         
         const ifcType = ifc.getIfcType(modelID, expressID);
-        storeProperty(expressID, "IfcType", ifcType, "General");
+        storeProperty(expressID, "IfcType", ifcType, "Instance Properties");
+        storeProperty(expressID, "expressID", expressID, "Instance Properties");
+
+        const ifcBuilding = await viewer.IFC.getAllItemsOfType(modelID, 4031249490, true);
+        const ifcBuildingName = ifcBuilding[0].Name.value;
+        storeProperty(expressID, "IfcBuildingName", ifcBuildingName, "Building Properties");
 
         processCount += 1;
         callback(processCount/ids.length);
@@ -121886,9 +121906,8 @@ async function getModelProperties(modelID = 0, callback) {
 
 const parseDataButton = document.getElementById("parseData");
 parseDataButton.addEventListener("click", async () => {
-    await getModelProperties(0, (processing) => {});
+    await getModelProperties(0, (processing) => {console.log(processing);}, true);
     //await getModelProperties(1)
-    console.log("Properties parsed!");
 });
 
 //------START QUERY SETS FUNCTIONALITY------
@@ -121987,10 +122006,16 @@ function renderElementProperties(panel, modelID = 0, expressID) {
 
         }
         
-        const propertyDOMElement = document.createElement("div");
-        propertyDOMElement.className = "elementProperty";
-        propertyDOMElement.textContent = `${property}: ${value}`;
-        groups[group].append(propertyDOMElement);
+        const propertyElement = document.createElement("div");
+        propertyElement.className = "elementProperty";
+        const propertyNameElement = document.createElement("p");
+        propertyNameElement.textContent = property;
+        propertyNameElement.style.color = "#A5A4A4";
+        propertyNameElement.style.fontSize = "14px";
+        const propertyValueElement = document.createElement("p");
+        propertyValueElement.textContent = value;
+        propertyElement.append(propertyNameElement, propertyValueElement);
+        groups[group].append(propertyElement);
 
     }
 
@@ -122002,7 +122027,7 @@ const myRange = document.getElementById("myRange");
 const scheduleIds = [];
 createScheduleSets.addEventListener("click", () => {
 
-    const scheduleQuerySets = 
+    /*const scheduleQuerySets = 
     [
         "(['Nivel'.'1'] AND ['IfcType'.'BEAM'])",
         "(['Nivel'.'1'] AND ['IfcType'.'SLAB'])",
@@ -122015,6 +122040,15 @@ createScheduleSets.addEventListener("click", () => {
         "(['Nivel'.'4'] AND ['IfcType'.'WALL'])",
         "(['Nivel'.'5'] AND ['IfcType'.'SLAB'])",
         "(['Nivel'.'5'] AND ['IfcType'.'WALL'])"
+    ];*/
+
+    const scheduleQuerySets = 
+    [
+        "(['Nivel'.'1'])",
+        "(['Nivel'.'2'])",
+        "(['Nivel'.'3'])",
+        "(['Nivel'.'4'])",
+        "(['Nivel'.'5'])"
     ];
 
     scheduleQuerySets.forEach(queryString => {
