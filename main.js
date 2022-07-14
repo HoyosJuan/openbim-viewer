@@ -6,17 +6,21 @@ import QueryEditor from "./utils/query-sets"
 
 const container = document.getElementById('viewer-container')
 const viewer = window.viewer = new IfcViewerAPI({ "container": container })
-viewer.IFC.applyWebIfcConfig({ COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true });
+viewer.IFC.applyWebIfcConfig({ COORDINATE_TO_ORIGIN: false, USE_FAST_BOOLS: true });
 const ifc = viewer.IFC.loader.ifcManager
-viewer.clipper.active = true
 //await ifc.useWebWorkers(true, "IFCWorker.js")
+
+//Store the default web-ifc-viewer IfcSelection for easy access later
+const selection = viewer.IFC.selector.selection
+selection.ids = []
 
 const queryContainer = document.getElementById("queryContainer")
 const queryEditor = new QueryEditor(queryContainer, viewer)
 
 //Modify some of the web-ifc-viewer defaults
 viewer.IFC.selector.defSelectMat.color = new THREE.Color("gold")
-viewer.IFC.selector.defSelectMat.opacity = 0.25
+viewer.IFC.selector.defSelectMat.opacity = 0.5
+viewer.IFC.selector.defSelectMat.depthTest = true
 
 //Store some viewer data in variables so it can be used easily later
 const ifcModels = viewer.context.items.ifcModels
@@ -26,14 +30,6 @@ const raycaster = viewer.context.ifcCaster.raycaster
 raycaster.firstHitOnly = true
 const camera = viewer.context.getCamera()
 const pointer = viewer.context.mouse.position
-const cssColors = ["DarkCyan", "DarkOrange", "LightCoral", "LighGreen", "MediumOrchid"]
-const mat = new THREE.MeshLambertMaterial({
-    transparent: true,
-    opacity: 0.8,
-    color: "MediumAquaMarine",
-    //color: cssColors[Math.floor(Math.random()*cssColors.length)],
-    depthTest: true
-})
 
 async function loadIFC(url, getData = false) {
 
@@ -73,43 +69,41 @@ await loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc", true)
 
 function onMouseMove (e) {
 
-    raycaster.setFromCamera( pointer, camera )
-    const intersect = raycaster.intersectObjects( ifcModels, false )[0]
-    
-    if ( intersect == null ) {
-
-        viewer.IFC.selector.unpickIfcItems()
-        return
-
-    }
-    
-    const modelID = intersect.object.modelID
-    const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
-    viewer.IFC.selector.pickIfcItemsByID(0,[expressID])
-
 }
 
 function onMouseClick (e) {
 
-    pointer.x = ( (e.x - e.target.offsetLeft) / e.target.clientWidth ) * 2 - 1
-    pointer.y = - ( (e.y - e.target.offsetTop) / e.target.clientHeight ) * 2 + 1
+    if ( e.button != 0 ) {return}
+
     raycaster.setFromCamera( pointer, camera )
     const intersect = raycaster.intersectObjects( ifcModels, false )[0]
 
     if ( intersect == null ) {
 
-        viewer.IFC.selector.unpickIfcItems()
+        selection.ids = []
+        selection.unpick()
         return
 
     }
 
+    const modelID = intersect.object.modelID
     const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
-    renderElementProperties(propertiesPanel,0,expressID)
+    renderElementProperties(propertiesPanel, modelID, expressID)
+    
+    if ( e.ctrlKey ) {
+        selection.ids.push(expressID)
+        selection.pickByID(modelID, [expressID], false, false)
+    } else {
+        selection.ids = []
+        selection.unpick()
+        selection.ids.push(expressID)
+        selection.pickByID(modelID, [expressID])
+    }
 
 }
 
 renderer.domElement.addEventListener("mousemove", onMouseMove)
-renderer.domElement.addEventListener("mouseup", onMouseClick)
+renderer.domElement.addEventListener("mousedown", onMouseClick)
 
 async function getModelProperties(modelID = 0, callback = () => {}, getPsets = false) {
     
@@ -241,29 +235,19 @@ parseDataButton.addEventListener("click", async () => {
 //------START QUERY SETS FUNCTIONALITY------
 //------START QUERY SETS FUNCTIONALITY------
 
-const testQuery = document.getElementById("testQuery")
-const queryField = document.getElementById("queryField")
-
-testQuery.addEventListener("click", (e) => {
-
-    createQuerySet("Custom Query", queryEditor.getQueryString())    
-
+//Creates an IfcSelection to store query editor results
+const cssColors = ["DarkCyan", "DarkOrange", "LightCoral", "LighGreen", "MediumOrchid","MediumAquaMarine"]
+const queryMaterial = new THREE.MeshLambertMaterial({
+    transparent: true,
+    opacity: 0.8,
+    color: "LightCoral",
+    //color: cssColors[Math.floor(Math.random()*cssColors.length)],
+    depthTest: true
 })
 
-/**
- * @description Creates an IFC Selection class with the elements that met the criteria
- * of the given query string. It returns the new ifc selection.
-*/
-function createQuerySet(name, queryString) {
-
-    const ids = queryEditor.search(queryString)
-    if (ids.length == 0) { return }
-    const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, mat)
-    querySelection.pickByID(0,ids,true,true)
-    
-    return querySelection
-
-}
+const querySelection = new IfcSelection(viewer.context, viewer.IFC.loader, queryMaterial)
+const testQuery = document.getElementById("testQuery")
+const queryField = document.getElementById("queryField")
 
 const addQueryRule = document.getElementById("addQueryRule")
 addQueryRule.addEventListener("click", () => {
@@ -293,6 +277,16 @@ addQueryGroup.addEventListener("click", () => {
     queryEditor.createGroup()
     queryField.value = queryEditor.getQueryString()
     
+})
+
+testQuery.addEventListener("click", (e) => {
+
+    const ids = queryEditor.search(queryEditor.getQueryString())
+    if (ids.length == 0) { return }
+    //querySelection.pickByID(0,ids,true,true)
+    selection.ids = ids
+    selection.pickByID(0, ids, true, true)
+
 })
 
 //------END QUERY SETS FUNCTIONALITY------
@@ -410,6 +404,32 @@ myRange.addEventListener("input", () => {
 })
 
 //viewer.clipper.createFromNormalAndCoplanarPoint(new THREE.Vector3(0,-1,0), new THREE.Vector3(0,3,0), false)
+
+function createCustomSubset(modelID = 0, ids, material) {
+    
+    const subsetConfig = {
+        modelID: modelID,
+        scene: scene,
+        ids: ids,
+        removePrevious: true,
+        //material: material,
+        //customID: "My Custom Subset",
+        applyBVH: false
+    }
+    
+    const subset = viewer.IFC.loader.ifcManager.subsets.createSubset(subsetConfig)
+
+    const edgeMaterial = new THREE.LineBasicMaterial( { color: "Gold"} )
+    const edges = new THREE.EdgesGeometry( subset.geometry );
+    edgeMaterial.transparent = true
+    edgeMaterial.opacity = 1
+    const line = new THREE.LineSegments( edges, edgeMaterial )
+    line.name = "ElementEdges"
+    subset.add( line )
+
+    return subset
+
+}
 
 //-----TESTING FUNCTIONALITIES
 //-----TESTING FUNCTIONALITIES
