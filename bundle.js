@@ -121398,10 +121398,10 @@ class QueryEditor {
      * a search, or you can also pass the returned value from the currentQueryString 
      * method.
     */
-    search(queryString = this.getQueryString()){
+    search(modelID = 0, queryString = this.getQueryString()){
 
         if (queryString == "") {return}
-        const model = this.viewer.context.items.ifcModels[0];
+        const model = this.viewer.context.items.ifcModels[modelID];
         let result = [];
 
         try {
@@ -121468,6 +121468,23 @@ class QueryEditor {
         }
 
         return result
+    }
+
+    /**
+     * @description It does the same as the search method, it just applies it
+     * to all models by default.
+    */
+    searchAll(queryString = this.getQueryString()){
+
+        const ids = [];
+        this.viewer.context.items.ifcModels.forEach(model => {
+            this.search(model.modelID, queryString).forEach(id => {
+                ids.push(id);
+            });
+        });
+
+        return ids
+
     }
 
     /**
@@ -121692,72 +121709,81 @@ const queryContainer = document.getElementById("queryContainer");
 const queryEditor = new QueryEditor(queryContainer, viewer);
 
 //Modify some of the web-ifc-viewer defaults
-viewer.IFC.selector.defSelectMat.color = new Color("gold");
+viewer.IFC.selector.defSelectMat.color = new Color("Gold");
 viewer.IFC.selector.defSelectMat.opacity = 0.5;
 viewer.IFC.selector.defSelectMat.depthTest = true;
 
 //Store some viewer data in variables so it can be used easily later
 const ifcModels = viewer.context.items.ifcModels;
 const scene = viewer.context.getScene();
-const renderer = viewer.context.getRenderer();
 const raycaster = viewer.context.ifcCaster.raycaster;
+const renderer = viewer.context.getRenderer();
 raycaster.firstHitOnly = true;
+const canvas = renderer.domElement;
 const camera = viewer.context.getCamera();
+const ifcCamera = viewer.context.ifcCamera;
+ifcCamera.cameraControls.dampingFactor = 0.3;
+ifcCamera.cameraControls.draggingDampingFactor = 0.5;
 const pointer = viewer.context.mouse.position;
 
 async function loadIFC(url, getData = false) {
 
-    viewer.IFC.loader.load( url, (model) => {
-
-        ifcModels.push(model);
-        scene.add(model);
-        model.modelData = {};
-        model.modelElements = {};
-        if (getData) {getModelProperties(model.modelID);}
-        
-        //Add edges to the model
-        const edgeMaterial = new LineBasicMaterial( { color: "Black"} );
-        const edges = new EdgesGeometry( model.geometry );
-        edgeMaterial.transparent = true;
-        edgeMaterial.opacity = 0.3;
-        const line = new LineSegments( edges, edgeMaterial );
-        line.name = "ElementEdges";
-        model.add( line );
-        
-        viewer.context.fitToFrame();
-
-        console.log("Model loaded!");
-
-    });
+    const model = await viewer.IFC.loader.loadAsync(url);
+    ifcModels.push(model);
+    scene.add(model);
+    model.modelData = {};
+    model.modelElements = {};
+    if (getData) {getModelProperties(model.modelID);}
+    
+    //Add edges to the model
+    const edgeMaterial = new LineBasicMaterial( { color: "Black"} );
+    const edges = new EdgesGeometry( model.geometry );
+    edgeMaterial.transparent = true;
+    edgeMaterial.opacity = 0.4;
+    const line = new LineSegments( edges, edgeMaterial );
+    line.name = "ElementEdges";
+    model.add( line );
+    
+    viewer.context.fitToFrame();
 
 }
 
+//await loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
+await loadIFC("/IFC Files/NAV-IPI-ET1_E02-ZZZ-M3D-EST.ifc", true);
+//await loadIFC("/IFC Files/NAV-IPI-ET1_E03-ZZZ-M3D-EST.ifc", true)
+//await loadIFC("/IFC Files/NAV-IPI-ET1_E07-ZZZ-M3D-EST.ifc", true)
 //await loadIFC("/IFC Files/HNSAI_BPY_M3_ARQ_HABITACIONES.ifc")
-//await loadIFC("/IFC Files/NAV-FLUX-ET1-E01-ZZZ-M3D-INH.ifc")
-//await loadIFC("/IFC Files/NAV-BSKA-ETG_URB-ZZZ-M3D-ARQ.ifc")
+//await loadIFC("/IFC Files/NAV-FLUX-ET1-E01-ZZZ-M3D-INH.ifc", true)
+//await loadIFC("/IFC Files/NAV-BSKA-ETG_URB-ZZZ-M3D-ARQ.ifc", true)
 //await loadIFC("/IFC Files/HNSAI_BPY_M3_HVAC.ifc", true)
-await loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc", true);
-//await loadIFC("/IFC Files/SRR-CGC-T02-ZZZ-M3D-EST-001.ifc")
+//await loadIFC("/IFC Files/SRR-CGC-T01-ZZZ-M3D-EST-001.ifc", true)
+//await loadIFC("/IFC Files/SRR-CGC-T02-ZZZ-M3D-EST-001.ifc", true)
 //loadIFC("/IFC Files/SIMPLE-IFC.ifc")
-//loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc")
 
-function onMouseMove (e) {
 
-}
+//------START HANDLING CLICK EVENTS------
+//------START HANDLING CLICK EVENTS------
+//------START HANDLING CLICK EVENTS------
 
-function onMouseClick (e) {
+let [mouseDown, mouseMoved] = [false, false];
 
-    if ( e.button != 0 ) {return}
+function onMouseUp (e) {
+  
+    mouseDown = false;
 
+    if ( e.button != 0 || mouseMoved ) {
+        mouseMoved = false;
+        return
+    }
+
+    mouseMoved = false;
     raycaster.setFromCamera( pointer, camera );
     const intersect = raycaster.intersectObjects( ifcModels, false )[0];
 
     if ( intersect == null ) {
-
         selection.ids = [];
         selection.unpick();
         return
-
     }
 
     const modelID = intersect.object.modelID;
@@ -121765,19 +121791,38 @@ function onMouseClick (e) {
     renderElementProperties(propertiesPanel, modelID, expressID);
     
     if ( e.ctrlKey ) {
+        if ( selection.ids.indexOf(expressID) != -1 ) {
+            selection.ids = selection.ids.filter( id => {
+                return id != expressID
+            } );
+            selection.pickByID(modelID, selection.ids);
+            return
+        }
         selection.ids.push(expressID);
         selection.pickByID(modelID, [expressID], false, false);
-    } else {
-        selection.ids = [];
-        selection.unpick();
-        selection.ids.push(expressID);
-        selection.pickByID(modelID, [expressID]);
+        return
     }
+
+    selection.ids = [];
+    selection.unpick();
+    selection.ids.push(expressID);
+    selection.pickByID(modelID, [expressID]);
 
 }
 
-renderer.domElement.addEventListener("mousemove", onMouseMove);
-renderer.domElement.addEventListener("mousedown", onMouseClick);
+canvas.addEventListener("mousedown", () => {mouseDown = true;});
+canvas.addEventListener("mousemove", () => {
+    if ( mouseMoved ) {return}
+    mouseMoved = true;
+    if ( mouseDown == false ) {mouseMoved = false;}
+});
+
+canvas.addEventListener("mouseup", onMouseUp);
+
+//------END HANDLING CLICK EVENTS------
+//------END HANDLING CLICK EVENTS------
+//------END HANDLING CLICK EVENTS------
+
 
 async function getModelProperties(modelID = 0, callback = () => {}, getPsets = false) {
     
@@ -121900,9 +121945,10 @@ async function getModelProperties(modelID = 0, callback = () => {}, getPsets = f
 }
 
 const parseDataButton = document.getElementById("parseData");
-parseDataButton.addEventListener("click", async () => {
-    await getModelProperties(0, (processing) => {console.log(processing);}, true);
-    //await getModelProperties(1)
+parseDataButton.addEventListener("click", () => {
+    ifcModels.forEach(model => {
+        getModelProperties(model.modelID, (processing) => {console.log(processing);}, true);
+    });
 });
 const queryMaterial = new MeshLambertMaterial({
     transparent: true,
@@ -121948,11 +121994,12 @@ addQueryGroup.addEventListener("click", () => {
 
 testQuery.addEventListener("click", (e) => {
 
-    const ids = queryEditor.search(queryEditor.getQueryString());
+    const ids = queryEditor.searchAll();
     if (ids.length == 0) { return }
-    //querySelection.pickByID(0,ids,true,true)
     selection.ids = ids;
-    selection.pickByID(0, ids, true, true);
+    ifcModels.forEach(model => {
+        selection.pickByID(model.modelID, ids, true, true);
+    });
 
 });
 
@@ -122009,39 +122056,41 @@ function renderElementProperties(panel, modelID = 0, expressID) {
 
 }
 
+propertiesPanel.addEventListener("click", (e) => {
+
+    selection.unpick();
+    const parentChildren = Array.from(e.target.parentNode.children);
+    const queryString = `(['${parentChildren[0].textContent}' = '${parentChildren[1].textContent}'])`;
+    const ids = queryEditor.searchAll(queryString);
+    selection.ids = ids;
+    selection.pickByID(0, ids, true, true);
+
+});
+
 //4D viewer
 const createScheduleSets = document.getElementById("createScheduleSets");
 const myRange = document.getElementById("myRange");
 const scheduleIds = [];
 createScheduleSets.addEventListener("click", () => {
 
-    /*const scheduleQuerySets = 
-    [
-        "(['Nivel'.'1'] AND ['IfcType'.'BEAM'])",
-        "(['Nivel'.'1'] AND ['IfcType'.'SLAB'])",
-        "(['Nivel'.'1'] AND ['IfcType'.'WALL'])",
-        "(['Nivel'.'2'] AND ['IfcType'.'SLAB'])",
-        "(['Nivel'.'2'] AND ['IfcType'.'WALL'])",
-        "(['Nivel'.'3'] AND ['IfcType'.'SLAB'])",
-        "(['Nivel'.'3'] AND ['IfcType'.'WALL'])",
-        "(['Nivel'.'4'] AND ['IfcType'.'SLAB'])",
-        "(['Nivel'.'4'] AND ['IfcType'.'WALL'])",
-        "(['Nivel'.'5'] AND ['IfcType'.'SLAB'])",
-        "(['Nivel'.'5'] AND ['IfcType'.'WALL'])"
-    ];*/
-
     const scheduleQuerySets = 
     [
-        "(['Nivel'.'1'])",
-        "(['Nivel'.'2'])",
-        "(['Nivel'.'3'])",
-        "(['Nivel'.'4'])",
-        "(['Nivel'.'5'])"
+        "(['Storey Name'.'1'] AND ['IfcType'.'BEAM'])",
+        "(['Storey Name'.'1'] AND ['IfcType'.'SLAB'])",
+        "(['Storey Name'.'1'] AND ['IfcType'.'WALL'])",
+        "(['Storey Name'.'2'] AND ['IfcType'.'SLAB'])",
+        "(['Storey Name'.'2'] AND ['IfcType'.'WALL'])",
+        "(['Storey Name'.'3'] AND ['IfcType'.'SLAB'])",
+        "(['Storey Name'.'3'] AND ['IfcType'.'WALL'])",
+        "(['Storey Name'.'4'] AND ['IfcType'.'SLAB'])",
+        "(['Storey Name'.'4'] AND ['IfcType'.'WALL'])",
+        "(['Storey Name'.'5'] AND ['IfcType'.'SLAB'])",
+        "(['Storey Name'.'5'] AND ['IfcType'.'WALL'])"
     ];
 
     scheduleQuerySets.forEach(queryString => {
-        queryEditor.search(queryString).forEach(element => {
-            scheduleIds.push(element);
+        queryEditor.searchAll(queryString).forEach(id => {
+            scheduleIds.push(id);
         });
     });
 

@@ -13,10 +13,10 @@ export default class QueryEditor {
      * a search, or you can also pass the returned value from the currentQueryString 
      * method.
     */
-    search(queryString = this.getQueryString()){
+    search(modelID = 0, queryString = this.getQueryString()){
 
         if (queryString == "") {return}
-        const model = this.viewer.context.items.ifcModels[0]
+        const model = this.viewer.context.items.ifcModels[modelID]
         let result = []
 
         try {
@@ -83,6 +83,23 @@ export default class QueryEditor {
         }
 
         return result
+    }
+
+    /**
+     * @description It does the same as the search method, it just applies it
+     * to all models by default.
+    */
+    searchAll(queryString = this.getQueryString()){
+
+        const ids = []
+        this.viewer.context.items.ifcModels.forEach(model => {
+            this.search(model.modelID, queryString).forEach(id => {
+                ids.push(id)
+            })
+        })
+
+        return ids
+
     }
 
     /**
