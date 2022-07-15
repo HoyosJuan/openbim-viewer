@@ -17,7 +17,9 @@ export default class QueryEditor {
 
         if (queryString == "") {return}
         const model = this.viewer.context.items.ifcModels[modelID]
-        let result = []
+        //let result = []
+        let result = {}
+        result[modelID] = []
 
         try {
             
@@ -72,13 +74,14 @@ export default class QueryEditor {
                 
             })
 
-            result = cf.arrayOperator(result, groupResult)[queryOperators[i]]
+            result[modelID] = cf.arrayOperator(result[modelID], groupResult)[queryOperators[i]]
 
             })
 
         } catch(error) {
 
             result = []
+            //console.log(error)
 
         }
 
@@ -91,11 +94,10 @@ export default class QueryEditor {
     */
     searchAll(queryString = this.getQueryString()){
 
-        const ids = []
+        const ids = {}
         this.viewer.context.items.ifcModels.forEach(model => {
-            this.search(model.modelID, queryString).forEach(id => {
-                ids.push(id)
-            })
+            const modelID = model.modelID
+            ids[modelID] = this.search(modelID, queryString)[modelID]
         })
 
         return ids

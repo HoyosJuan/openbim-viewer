@@ -163,11 +163,12 @@ td:hover {
   height: fit-content;
   width: fit-content;
   position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translate(-50%, 0%);
+  top: 20px;
+  left: 20px;
+  /*transform: translate(0%, 0%);*/
   display: flex;
-  column-gap: 10px;
+  flex-direction: column;
+  row-gap: 10px;
   align-items: center;
   justify-content: center;
   padding: 15px;

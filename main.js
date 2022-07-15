@@ -12,7 +12,7 @@ const ifc = viewer.IFC.loader.ifcManager
 
 //Store the default web-ifc-viewer IfcSelection for easy access later
 const selection = viewer.IFC.selector.selection
-selection.ids = []
+selection.ids = {}
 
 const queryContainer = document.getElementById("queryContainer")
 const queryEditor = new QueryEditor(queryContainer, viewer)
@@ -39,6 +39,7 @@ async function loadIFC(url, getData = false) {
 
     const model = await viewer.IFC.loader.loadAsync(url)
     ifcModels.push(model)
+    selection.ids[model.modelID] = []
     scene.add(model)
     model.modelData = {}
     model.modelElements = {}
@@ -57,10 +58,11 @@ async function loadIFC(url, getData = false) {
 
 }
 
-//await loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
+await loadIFC("/IFC Files/NAV-IPI-ET1_E01-ZZZ-M3D-EST.ifc", true)
 await loadIFC("/IFC Files/NAV-IPI-ET1_E02-ZZZ-M3D-EST.ifc", true)
-//await loadIFC("/IFC Files/NAV-IPI-ET1_E03-ZZZ-M3D-EST.ifc", true)
+await loadIFC("/IFC Files/NAV-IPI-ET1_E03-ZZZ-M3D-EST.ifc", true)
 //await loadIFC("/IFC Files/NAV-IPI-ET1_E07-ZZZ-M3D-EST.ifc", true)
+
 //await loadIFC("/IFC Files/HNSAI_BPY_M3_ARQ_HABITACIONES.ifc")
 //await loadIFC("/IFC Files/NAV-FLUX-ET1-E01-ZZZ-M3D-INH.ifc", true)
 //await loadIFC("/IFC Files/NAV-BSKA-ETG_URB-ZZZ-M3D-ARQ.ifc", true)
@@ -90,32 +92,41 @@ function onMouseUp (e) {
     const intersect = raycaster.intersectObjects( ifcModels, false )[0]
 
     if ( intersect == null ) {
-        selection.ids = []
-        selection.unpick()
+        Object.keys(selection.ids).forEach(modelID => {
+            selection.ids[modelID] = []
+            ifc.subsets.removeSubset(modelID, selection.material)
+        })
         return
     }
 
     const modelID = intersect.object.modelID
     const expressID = ifc.getExpressId(intersect.object.geometry, intersect.faceIndex)
+    let ids = selection.ids[modelID]
     renderElementProperties(propertiesPanel, modelID, expressID)
     
     if ( e.ctrlKey ) {
-        if ( selection.ids.indexOf(expressID) != -1 ) {
-            selection.ids = selection.ids.filter( id => {
+        if ( ids.indexOf(expressID) != -1 ) {
+            ids = ids.filter( id => {
                 return id != expressID
             } )
-            selection.pickByID(modelID, selection.ids)
+            selection.ids[modelID] = ids
+            selection.pickByID(modelID, ids, false, true)
             return
         }
-        selection.ids.push(expressID)
-        selection.pickByID(modelID, [expressID], false, false)
+        ids.push(expressID)
+        selection.ids[modelID] = ids
+        selection.pickByID(modelID, ids, false, true)
         return
     }
 
-    selection.ids = []
-    selection.unpick()
-    selection.ids.push(expressID)
-    selection.pickByID(modelID, [expressID])
+    Object.keys(selection.ids).forEach(modelID => {
+        selection.ids[modelID] = []
+        ifc.subsets.removeSubset(modelID, selection.material)
+    })
+    ids = []
+    ids.push(expressID)
+    selection.ids[modelID] = ids
+    selection.pickByID(modelID, ids, false, true)
 
 }
 
@@ -312,10 +323,11 @@ addQueryGroup.addEventListener("click", () => {
 testQuery.addEventListener("click", (e) => {
 
     const ids = queryEditor.searchAll()
-    if (ids.length == 0) { return }
-    selection.ids = ids
+    console.log(ids)
+    if (ids.length == {}) { return }
     ifcModels.forEach(model => {
-        selection.pickByID(model.modelID, ids, true, true)
+        const modelID = model.modelID
+        selection.pickByID(modelID, ids[modelID], true, true)
     })
 
 })
@@ -332,6 +344,8 @@ testQuery.addEventListener("click", (e) => {
 //Properties Panel
 const propertiesPanel = document.getElementById("propertiesList")
 
+/*Podría hacer que se mostraran las propiedades del elemento que está seleccionado
+con el selection.ids*/
 function renderElementProperties(panel, modelID = 0, expressID) {
     
     cf.removeAllChildNodes(panel)

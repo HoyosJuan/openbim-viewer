@@ -2,7 +2,7 @@
  * @description This applies AND/OR operators on two input arrays. 
 */
 
-export function arrayOperator (arrayA, arrayB, operator){
+export function arrayOperator (arrayA, arrayB){
 
     return {
         "AND": arrayA.filter(x => arrayB.includes(x)),
